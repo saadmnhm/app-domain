@@ -106,15 +106,6 @@ const fetchUsers = async () => {
   }
 };
 
-const deleteUser = async (id: number) => {
-  try {
-    await userService.deleteUser(id);
-    fetchUsers(); 
-  } catch (err) {
-    console.error('Error deleting user:', err);
-    error.value = 'Failed to delete user. Please try again.';
-  }
-};
 
 const addNewUser = (userData: UserProperties) => {
   fetchUsers(); 
@@ -295,15 +286,6 @@ const filteredUsers = computed(() => {
                   @click="viewUser(user.id)"
                 >
                   View
-                </VBtn>
-                <VSpacer />
-                <VBtn
-                  variant="tonal"
-                  size="small"
-                  color="error"
-                  @click="deleteUser(user.id)"
-                >
-                  Delete
                 </VBtn>
               </VCardActions>
             </VCard>

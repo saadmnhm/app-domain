@@ -16,7 +16,7 @@ class CategoryController extends Controller
             $query->withTrashed();
         }
 
-        $categories = $query->get();
+        $categories = $query->withCount('clients')->get();
         return response()->json($categories);
     }
 
@@ -105,7 +105,6 @@ class CategoryController extends Controller
     {
         $category = Category::findOrFail($id);
 
-        // Check if any clients are using this category
         if ($category->clients()->count() > 0) {
             return response()->json([
                 'success' => false,

@@ -254,7 +254,9 @@ const sort = (key) => {
   fetchDomains()
 }
 
-
+const isDomainInUse = (domain) => {
+  return domain.clients_count > 0
+}
 
 </script>
 
@@ -328,9 +330,17 @@ const sort = (key) => {
           </VCardItem>
           
           <VCardText class="pb-2">
-            <p class="text-body-2 mb-2">
-              {{ item.description || 'No description provided' }}
-            </p>
+            <div class="d-flex align-center justify-space-between mt-2">
+              <p class="text-body-2 mb-2">
+                {{ item.description || 'No description provided' }}
+              </p>
+
+              <span class="text-caption text-medium-emphasis">
+                <VIcon icon="tabler-building" size="16" />
+                  Used by {{ item.clients_count }} 
+              </span>
+
+            </div>
             
             <div class="d-flex align-center justify-space-between mt-2">
               <span class="text-caption text-medium-emphasis">
@@ -358,6 +368,7 @@ const sort = (key) => {
             </VBtn>
             
             <VBtn
+              v-if="!isDomainInUse(item)"
               variant="text"
               size="small"
               color="error"
@@ -366,6 +377,13 @@ const sort = (key) => {
               <VIcon icon="tabler-trash" class="me-1" size="16" />
               Delete
             </VBtn>
+            
+            <VTooltip
+              v-else
+              location="top"
+            >
+              <span>Cannot delete: Category is being used by {{ item.clients_count }}</span>
+            </VTooltip>
           </VCardActions>
         </VCard>
       </VCol>

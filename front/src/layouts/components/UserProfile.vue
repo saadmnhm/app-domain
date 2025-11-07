@@ -30,7 +30,7 @@ onMounted(async () => {
     const response = await userService.getCurrentUser()
     
     // Update userData with response data
-    Object.assign(userData, response.data)
+    Object.assign(userData, response)
     
     console.log('User data loaded:', userData)
   } catch (error) {

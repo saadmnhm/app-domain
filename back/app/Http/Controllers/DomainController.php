@@ -7,9 +7,15 @@ use Illuminate\Support\Facades\Validator;
 
 class DomainController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $domains = Domain::all();
+        $query = Domain::query();
+
+        if ($request->has('withTrashed') && $request->withTrashed) {
+            $query->withTrashed();
+        }
+
+        $domains = $query->withCount('clients')->get();
         return response()->json($domains);
     }
 

@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import axios from 'axios'
 import categoryService from '@/services/categoryService'
 
+const is_used = ref(false)
 
 const categories = ref([])
 const isLoading = ref(false)
@@ -24,7 +25,6 @@ const isSubmitting = ref(false)
 
 const currentPage = ref(1)
 const pageSize = ref(10)
-const pageSizeOptions = [5, 10, 15, 20]
 
 const fileInput = ref(null)
 const iconFile = ref(null)
@@ -162,9 +162,9 @@ const submitCategoryForm = async () => {
     console.error('Error saving category:', error)
     
     if (error.response?.data?.errors) {
-      formErrors.value = error.response.data.errors
+      formErrors.value = error.response.errors
     } else if (error.response?.data?.message) {
-      formErrors.value = { general: error.response.data.message }
+      formErrors.value = { general: error.response.message }
     } else {
       formErrors.value = { general: 'An error occurred while saving the category' }
     }
@@ -246,7 +246,7 @@ const deleteCategory = async () => {
     isDeleteDialogVisible.value = false
   } catch (error) {
     if (error.response?.status === 409) {
-      alert(error.response.data.message)
+      alert(error.response.message)
     } else {
       console.error('Error deleting category:', error)
     }
@@ -283,7 +283,9 @@ const sort = (key) => {
 }
 
 
-
+const isCategoryInUse = (category) => {
+  return category.clients_count > 0
+}
 
 </script>
 
@@ -295,18 +297,6 @@ const sort = (key) => {
       
       <template #append>
         <div class="d-flex align-center gap-4">
-          <!-- Search -->
-          <VTextField
-            v-model="searchQuery"
-            density="compact"
-            placeholder="Search categories"
-            append-inner-icon="tabler-search"
-            single-line
-            hide-details
-            @keyup.enter="handleSearch"
-            style="max-width: 300px;min-width: 250px;"
-          />
-          
           <!-- Add New Button -->
           <VBtn
             prepend-icon="tabler-plus"
@@ -365,9 +355,17 @@ const sort = (key) => {
           </VCardItem>
           
           <VCardText class="pb-2">
-            <p class="text-body-2 mb-2">
-              {{ item.description || 'No description provided' }}
-            </p>
+            <div class="d-flex align-center justify-space-between mt-2">
+              <p class="text-body-2 mb-2">
+                {{ item.description || 'No description provided' }}
+              </p>
+
+              <span class="text-caption text-medium-emphasis">
+                <VIcon icon="tabler-building" size="16" />
+                  Used by {{ item.clients_count }} 
+              </span>
+
+            </div>
             
             <div class="d-flex align-center justify-space-between mt-2">
               <span class="text-caption text-medium-emphasis">
@@ -378,6 +376,7 @@ const sort = (key) => {
                 Created: {{ new Date(item.created_at).toLocaleDateString() }}
               </span>
             </div>
+             
           </VCardText>
           
           <VDivider />
@@ -394,7 +393,9 @@ const sort = (key) => {
               Edit
             </VBtn>
             
+            <!-- Only show delete button if category is NOT in use -->
             <VBtn
+              v-if="!isCategoryInUse(item)"
               variant="text"
               size="small"
               color="error"
@@ -403,6 +404,17 @@ const sort = (key) => {
               <VIcon icon="tabler-trash" class="me-1" size="16" />
               Delete
             </VBtn>
+            
+            <!-- Show disabled button with tooltip if category IS in use -->
+            <VTooltip
+              v-else
+              location="top"
+            >
+              <template #activator="{ props }">
+                
+              </template>
+              <span>Cannot delete: Category is being used by {{ item.clients_count }} client{{ item.clients_count !== 1 ? 's' : '' }}</span>
+            </VTooltip>
           </VCardActions>
         </VCard>
       </VCol>
@@ -453,31 +465,7 @@ const sort = (key) => {
     </VRow>
     
     <!-- Pagination -->
-    <div v-if="totalCategories > pageSize" class="d-flex align-center justify-space-between px-6 py-4">
-      <div>
-        <span class="text-body-2 text-medium-emphasis">
-          Showing {{ (currentPage - 1) * pageSize + 1 }} to {{ Math.min(currentPage * pageSize, totalCategories) }} of {{ totalCategories }} entries
-        </span>
-        
-        <VSelect
-          v-model="pageSize"
-          :items="pageSizeOptions"
-          variant="outlined"
-          density="compact"
-          hide-details
-          class="d-inline-block ms-4"
-          style="width: 80px;"
-          @update:modelValue="onPageSizeChange"
-        />
-      </div>
-      
-      <VPagination
-        v-model="currentPage"
-        :length="Math.ceil(totalCategories / pageSize)"
-        :total-visible="5"
-        @update:modelValue="onPageChange"
-      />
-    </div>
+    
   </VCard>
   
   <VDialog

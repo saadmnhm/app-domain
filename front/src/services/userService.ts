@@ -1,72 +1,63 @@
 import { $api } from '@/utils/api'
 
 const userService = {
-
   getUsers(params = {}) {
-    return $api(`/users`, { params });
+    return $api('/users', { params })
   },
 
   getUser(id: number) {
-    return $api(`/users/${id}`);
+    return $api(`/users/${id}`)
   },
 
- 
   createUser(userData: any) {
-    if (userData instanceof FormData) {
-      return $api(`/users`, userData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
-      });
-    } else {
-      return $api(`/users`, userData);
-    }
+    return $api('/users', {
+      method: 'POST',
+      body: userData
+    })
   },
 
- 
   updateUser(id: number, userData: any) {
-    return $api(`/users/${id}`, userData);
+    return $api(`/users/${id}`, {
+      method: 'PUT',
+      body: userData
+    })
   },
-
 
   deleteUser(id: number) {
     return $api(`/users/${id}`, {
       method: 'DELETE'
-    });
+    })
   },
 
- 
   updateUserPassword(userId: number, passwordData: any) {
-    return $api(`/users/${userId}/password`, passwordData);
+    return $api(`/users/${userId}/password`, {
+      method: 'PUT',
+      body: passwordData
+    })
   },
 
-  toggleUserStatus(userId: number, statusData: any) {
-    return $api(`/users/${userId}/toggle-active`, statusData);
-  },
-  
-  uploadAvatar(userId: number, formData: any) {
-    return $api(`/users/${userId}/avatar`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
-    });
+  toggleUserStatus(userId: number) {
+    return $api(`/users/${userId}/toggle-active`, {
+      method: 'POST'
+    })
   },
 
- 
+  uploadAvatar(userId: number, formData: FormData) {
+    return $api(`/users/${userId}/avatar`, {
+      method: 'POST',
+      body: formData
+    })
+  },
+
   removeAvatar(userId: number) {
     return $api(`/users/${userId}/avatar`, {
       method: 'DELETE'
-    });
+    })
   },
- 
+
   getCurrentUser() {
-    return $api(`/user`);
+    return $api('/user')
   },
+}
 
- 
-  async getCsrfCookie() {
-    await $api('/sanctum/csrf-cookie');
-  },
-};
-
-export default userService;
+export default userService

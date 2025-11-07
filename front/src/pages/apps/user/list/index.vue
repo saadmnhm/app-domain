@@ -4,18 +4,16 @@ import userService from '@/services/userService';
 import AddNewUserDrawer from '@/views/apps/user/list/AddNewUserDrawer.vue';
 import type { UserProperties } from '@db/apps/users/types';
 import { useRouter } from 'vue-router';
-import { useAuthStore } from '@/stores/authStore' // Most likely
+import { useAuthStore } from '@/stores/authStore' 
 
 const router = useRouter();
 const authStore = useAuthStore()
 
-// User data state
 const users = ref<UserProperties[]>([]);
 const totalUsers = ref(0);
 const isLoading = ref(true);
 const error = ref('');
 
-// Pagination, sorting and filtering
 const searchQuery = ref('');
 const selectedRole = ref('');
 const page = ref(1);
@@ -23,13 +21,10 @@ const itemsPerPage = ref(10);
 const sortBy = ref('fullName');
 const sortDesc = ref(false);
 
-// UI state
 const isAddNewUserDrawerVisible = ref(false);
 
-// Computed property for current user ID
 const currentUserId = computed(() => authStore.user?.id)
 
-// Helper functions
 const resolveUserRoleVariant = (role: string) => {
   const roleLowerCase = role?.toLowerCase() || '';
 
@@ -48,7 +43,6 @@ const avatarText = (firstName: string, lastName: string) => {
   return name.split(' ').map(word => word.charAt(0).toUpperCase()).join('');
 };
 
-// Fetch users from API
 const fetchUsers = async () => {
   isLoading.value = true;
   error.value = '';
@@ -63,15 +57,10 @@ const fetchUsers = async () => {
       sortOrder: sortDesc.value ? 'desc' : 'asc',
     };
     
-    // console.log('Fetching users with params:', params);
     const response = await userService.getUsers(params);
-    // console.log('API Response:', response);
     
-    // Handle API response - $api returns body directly
     if (response) {
-      // console.log('Response data structure:', Object.keys(response));
       
-      // Map API response to our expected format
       let apiUsers = [];
       
       if (Array.isArray(response)) {
@@ -82,7 +71,6 @@ const fetchUsers = async () => {
         apiUsers = response.data;
       }
       
-      // Map fields to ensure compatibility with our template
       users.value = apiUsers.map(user => ({
         id: user.id,
         firstName: user.first_name || user.firstName || '',
@@ -96,16 +84,13 @@ const fetchUsers = async () => {
         contact: user.contact || user.phone || '',
       }));
       
-      // Calculate total users for pagination
-      totalUsers.value = response.data.total || 
-                        (response.data.meta ? response.data.meta.total : null) || 
-                        users.value.length;
+      totalUsers.value = response.total || 
+      (response.meta ? response.meta.total : null) || 
+      users.value.length;
       
-      // console.log('Processed users:', users.value);
       
       
       if (users.value.length === 0) {
-        // console.warn('No users found in data', response.data);
       }
     } else {
       console.error('Invalid response format', response);
@@ -121,43 +106,36 @@ const fetchUsers = async () => {
   }
 };
 
-// Delete user
 const deleteUser = async (id: number) => {
   try {
     await userService.deleteUser(id);
-    fetchUsers(); // Refresh the list after deletion
+    fetchUsers(); 
   } catch (err) {
     console.error('Error deleting user:', err);
     error.value = 'Failed to delete user. Please try again.';
   }
 };
 
-// Handle new user creation from drawer
 const addNewUser = (userData: UserProperties) => {
-  fetchUsers(); // Refresh the list after creating a user
+  fetchUsers(); 
 };
 
-// Watch for changes in filters, pagination, etc.
 watch([page, itemsPerPage,], () => {
   fetchUsers();
 }, { deep: true });
 
-// Initial data fetch
 onMounted(() => {
   fetchUsers();
 });
 
-// Navigate to user view
 const viewUser = (id: number) => {
   router.push({ name: 'apps-user-view-id', params: { id } });
 };
 
-// Computed property for empty state
 const showEmptyState = computed(() => {
   return !isLoading.value && users.value.length === 0;
 });
 
-// Create a computed property for filtered users
 const filteredUsers = computed(() => {
   return users.value.filter(user => user.id !== currentUserId.value)
 })

@@ -7,7 +7,6 @@ import userService from '@/services/userService'
 const authStore = useAuthStore()
 const currentUserId = authStore.user?.id
 
-// Get route and extract user ID
 const route = useRoute()
 const userId = route.params.id
 const router = useRouter() 
@@ -16,14 +15,12 @@ const goBack = () => {
   router.back()
 }
 
-// Add loading state
 const isLoading = ref(true)
 const form = ref(null)
 const isSubmitting = ref(false)
 const alertMessage = ref('')
 const alertType = ref('success')
 
-// Create empty user data structure
 const userData = reactive({
   first_name: '',
   last_name: '',
@@ -33,29 +30,24 @@ const userData = reactive({
   avatar: ''
 })
 
-// Password change data
 const passwordData = reactive({
   newPassword: '',
   confirmPassword: ''
 })
 
-// Role options
 const roleOptions = [
   { title: 'Admin', value: 'admin' },
   { title: 'Manager', value: 'manager' },
 ]
 
-// File input ref
 const fileInput = ref<HTMLInputElement | null>(null);
 
-// Fetch user data on component mount
 onMounted(async () => {
   try {
     isLoading.value = true
     const response = await userService.getUser(Number(userId))
     
-    // This line copies all properties from response.data to userData
-    Object.assign(userData, response.data)
+    Object.assign(userData, response)
     
   } catch (error) {
     console.error('Error fetching user data:', error)
@@ -66,9 +58,7 @@ onMounted(async () => {
   }
 })
 
-// Handle avatar upload
 const uploadAvatar = () => {
-  // Trigger the hidden file input
   fileInput.value?.click();
 }
 
@@ -79,14 +69,12 @@ const handleFileChange = async (event: Event) => {
   const file = target.files[0];
   if (!file) return;
   
-  // Validate file size (800KB max)
   if (file.size > 800 * 1024) {
     alertMessage.value = 'File size exceeds 800KB limit';
     alertType.value = 'error';
     return;
   }
   
-  // Validate file type
   const validTypes = ['image/jpeg', 'image/png', 'image/gif'];
   if (!validTypes.includes(file.type)) {
     alertMessage.value = 'Only JPG, PNG, and GIF files are allowed';
@@ -102,8 +90,7 @@ const handleFileChange = async (event: Event) => {
     
     const response = await userService.uploadAvatar(Number(userId), formData);
     
-    // Update the user's avatar with the returned path
-    userData.avatar = response.data.avatar;
+    userData.avatar = response.avatar;
     
     alertMessage.value = 'Avatar uploaded successfully';
     alertType.value = 'success';
@@ -113,12 +100,10 @@ const handleFileChange = async (event: Event) => {
     alertType.value = 'error';
   } finally {
     isSubmitting.value = false;
-    // Clear the file input so the same file can be selected again
     if (fileInput.value) fileInput.value.value = '';
   }
 }
 
-// Handle avatar removal
 const removeAvatar = async () => {
   if (!userData.avatar) {
     alertMessage.value = 'No avatar to remove';
@@ -131,7 +116,6 @@ const removeAvatar = async () => {
   try {
     await userService.removeAvatar(Number(userId));
     
-    // Clear the avatar field
     userData.avatar = '';
     
     alertMessage.value = 'Avatar removed successfully';
@@ -145,7 +129,6 @@ const removeAvatar = async () => {
   }
 }
 
-// Save user information
 const saveUserInfo = async () => {
   const { valid } = await form.value.validate()
   
@@ -156,9 +139,8 @@ const saveUserInfo = async () => {
   try {
     console.log('Sending data to API:', userData)
     const response = await userService.updateUser(Number(userId), userData)
-    console.log('API response:', response.data)
+    console.log('API response:', response)
     
-    // Handle password change if needed
     if (passwordData.newPassword) {
       if (passwordData.newPassword !== passwordData.confirmPassword) {
         throw new Error('Passwords do not match')
@@ -167,17 +149,14 @@ const saveUserInfo = async () => {
         throw new Error('Password must be at least 8 characters')
       }
       
-      // Add actual password update API call:
       await userService.updateUserPassword(Number(userId), {
         newPassword: passwordData.newPassword
       })
     }
     
-    // Success
     alertMessage.value = 'User information updated successfully'
     alertType.value = 'success'
     
-    // Reset password fields
     passwordData.newPassword = ''
     passwordData.confirmPassword = ''
   } catch (error) {
@@ -193,7 +172,7 @@ const toggleSuspend = async () => {
   isSubmitting.value = true
   try {
     const response = await userService.toggleUserStatus(Number(userId))
-    userData.is_active = response.data.is_active
+    userData.is_active = response.is_active
     alertMessage.value = `User has been ${userData.is_active ? 'activated' : 'suspended'} successfully`
     alertType.value = 'success'
   } catch (error) {

@@ -6,12 +6,10 @@ import clientContactService from '@/services/clientcontactService'
 import clientmodal from '@/pages/apps/client/components/clientmodal.vue'
 import contactclientmodal from '@/pages/apps/client/components/contactclientmodal.vue'
 
-// Get route parameters and router
 const route = useRoute()
 const router = useRouter()
 const clientId = computed(() => route.params.id)
 
-// State
 const client = ref(null)
 const contacts = ref([])
 const isLoading = ref(true)
@@ -41,7 +39,6 @@ const fetchClient = async () => {
   }
 }
 
-// Fetch contacts for this client
 const fetchContacts = async () => {
   try {
     const response = await clientContactService.getContactsByClient(clientId.value)
@@ -51,7 +48,6 @@ const fetchContacts = async () => {
   }
 }
 
-// New function to fetch client history
 const fetchClientHistory = async () => {
   try {
 
@@ -66,7 +62,6 @@ const fetchClientHistory = async () => {
       }
     ]
 
-    // Add update history if available
     if (client.value?.updated_at && client.value?.updated_at !== client.value?.created_at) {
       clientHistory.value.push({
         id: 2,
@@ -77,7 +72,6 @@ const fetchClientHistory = async () => {
       })
     }
 
-    // Add contact history entries
     contacts.value.forEach((contact, index) => {
       clientHistory.value.push({
         id: 3 + index,
@@ -100,14 +94,12 @@ const fetchClientHistory = async () => {
       }
     })
 
-    // Sort by timestamp, newest first
     clientHistory.value.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
   } catch (error) {
     console.error('Error fetching client history:', error)
   }
 }
 
-// Format date - use this for various date fields
 const formatDate = (dateString) => {
   if (!dateString) return '-'
   const date = new Date(dateString)
@@ -118,23 +110,19 @@ const formatDate = (dateString) => {
   }).format(date)
 }
 
-// Open contact add dialog
 const openAddContactDialog = () => {
   isContactDialogVisible.value = true
 }
 
-// Handle contact save
 const handleContactSaved = () => {
   closeContactDialog()
-  fetchContacts() // Refresh contacts list
+  fetchContacts() 
 }
 
-// Handle contact cancel
 const handleContactCanceled = () => {
   closeContactDialog()
 }
 
-// Delete contact
 const confirmDeleteContact = (contact) => {
   contactToDelete.value = contact
   isDeleteContactDialogVisible.value = true
@@ -146,7 +134,6 @@ const deleteContact = async () => {
   try {
     await clientContactService.deleteContact(contactToDelete.value.id)
     
-    // Add to history immediately
     clientHistory.value.unshift({
       id: Date.now(),
       type: 'contact_deleted',
@@ -155,7 +142,6 @@ const deleteContact = async () => {
       user: 'Current User'
     })
     
-    // Refresh contacts list
     fetchContacts()
   } catch (error) {
     console.error('Error deleting contact:', error)
@@ -165,12 +151,10 @@ const deleteContact = async () => {
   }
 }
 
-// Edit client
 const editClient = () => {
   isClientDialogVisible.value = true
 }
 
-// Handle client saved
 const handleClientSaved = (updatedClient) => {
   isClientDialogVisible.value = false
   
@@ -178,65 +162,53 @@ const handleClientSaved = (updatedClient) => {
     client.value = { ...client.value, ...updatedClient }
   }
   
-  // Refresh client data and history
   fetchClient()
 }
 
-// Handle client edit canceled
 const handleClientCanceled = () => {
   isClientDialogVisible.value = false
 }
 
-// Back to list
 const goBack = () => {
   router.push('/apps/client/list')
 }
 
-// Edit contact
 const editContact = (contact) => {
   editingContact.value = contact
   isContactDialogVisible.value = true
 }
 
-// Close contact dialog
 const closeContactDialog = () => {
   isContactDialogVisible.value = false
   editingContact.value = null
 }
 
-// Submit client form
 const submitClientForm = async () => {
   isSubmittingClient.value = true
   
   try {
-    // Call the submit method on the client modal component
     await clientModalRef.value.submitForm()
     
-    // If successful (no error thrown), close the dialog
     isClientDialogVisible.value = false
   } catch (error) {
-    // Error is handled by the clientmodal component
     console.error('Error submitting client form:', error)
   } finally {
     isSubmittingClient.value = false
   }
 }
 
-// Initialize
 onMounted(() => {
   fetchClient().then(() => {
     fetchClientHistory()
   })
 })
 
-// Call fetchClientHistory after client and contacts are loaded
 watch([client, contacts], ([newClient, newContacts]) => {
   if (newClient && newContacts) {
     fetchClientHistory()
   }
 }, { deep: true })
 
-// Add these new helper functions
 const getHistoryItemColor = (type) => {
   switch (type) {
     case 'creation':

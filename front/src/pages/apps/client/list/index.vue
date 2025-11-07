@@ -48,7 +48,6 @@ const fetchClients = async () => {
     
     const response = await clientService.getClients(params)
     
-    // $api returns body directly, handle both formats
     if (Array.isArray(response)) {
       clients.value = response
       totalClients.value = response.length
@@ -73,7 +72,6 @@ const fetchCategories = async () => {
   try {
     const response = await clientService.getCategories({ withTrashed: true })
     
-    // $api returns body directly
     if (Array.isArray(response)) {
       categories.value = response
     } else if (response && typeof response === 'object') {

@@ -8,14 +8,12 @@ import { VSkeletonLoader } from 'vuetify/components'
 
 const router = useRouter()
 
-// State for dashboard data
 const users = ref([])
 const clients = ref([])
 const categories = ref([])
 const isLoading = ref(true)
 const recentClients = ref([])
 
-// Stats cards data - use tabler icons instead of mdi
 const stats = ref([
   { 
     title: 'Total Users', 
@@ -40,7 +38,6 @@ const stats = ref([
   },
 ])
 
-// Fetch all dashboard data
 const fetchDashboardData = async () => {
   isLoading.value = true
   try {

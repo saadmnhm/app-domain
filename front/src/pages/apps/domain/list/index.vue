@@ -1,11 +1,9 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import axios from 'axios'  // Added axios import
+import axios from 'axios' 
 import domainService from '@/services/domainService'
 
-// ==================== STATE MANAGEMENT ===================
 
-// Main data and UI state
 const domains = ref([])
 const isLoading = ref(false)
 const totalDomains = ref(0)
@@ -16,7 +14,6 @@ const isDeleteDialogVisible = ref(false)
 const editMode = ref(false)
 const sortBy = ref({ key: 'created_at', order: 'desc' })
 
-// Form state
 const domainForm = ref({
   label: '',
   description: '',
@@ -24,20 +21,16 @@ const domainForm = ref({
 const formErrors = ref({})
 const isSubmitting = ref(false)
 
-// Pagination state
 const currentPage = ref(1)
 const pageSize = ref(10)
 const pageSizeOptions = [5, 10, 15, 20]
 
-// Icon upload state
 const fileInput = ref(null)
 const iconFile = ref(null)
 const iconPreview = ref(null)
 const uploadingIcon = ref(false)
 
-// ==================== DATA FETCHING ===================
 
-// Load domains from API
 const fetchDomains = async () => {
   isLoading.value = true
   try {
@@ -53,12 +46,10 @@ const fetchDomains = async () => {
     const response = await domainService.getDomains(params);
     console.log('API Response:', response);
     
-    // $api returns body directly, not wrapped in { data }
     if (Array.isArray(response)) {
       domains.value = response;
       totalDomains.value = response.length;
     } else if (response && typeof response === 'object') {
-      // Handle Laravel pagination format
       domains.value = response.data || [];
       totalDomains.value = response.total || response.meta?.total || 0;
     } else {
@@ -76,12 +67,8 @@ const fetchDomains = async () => {
   }
 }
 
-// Initialize data when component mounts
 onMounted(fetchDomains)
 
-// ==================== FORM OPERATIONS ===================
-
-// Reset form data
 const resetForm = () => {
   domainForm.value = {
     label: '',
@@ -96,13 +83,11 @@ const resetForm = () => {
   }
 }
 
-// Open dialog to add new domain
 const addNewDomain = () => {
   resetForm()
   isAddEditDomainDialogVisible.value = true
 }
 
-// Open dialog to edit existing domain
 const editDomain = (domain) => {
   domainForm.value = {
     label: domain.label,
@@ -111,10 +96,8 @@ const editDomain = (domain) => {
   selectedDomain.value = domain
   editMode.value = true
   
-  // Set icon preview if domain has an icon
   if (domain.icon) {
-    iconPreview.value = null // Reset first
-    // Set after a brief delay to ensure reactivity
+    iconPreview.value = null 
     setTimeout(() => {
       iconPreview.value = `http://127.0.0.1:8000${domain.icon}`
     }, 100)
@@ -125,31 +108,25 @@ const editDomain = (domain) => {
   isAddEditDomainDialogVisible.value = true
 }
 
-// Submit form to create or update domain
 const submitDomainForm = async () => {
   formErrors.value = {}
   isSubmitting.value = true
   
   try {
-    // Use FormData to handle file uploads
     const formData = new FormData()
     formData.append('label', domainForm.value.label)
     formData.append('description', domainForm.value.description || '')
 
-    // Add icon file if exists
     if (iconFile.value) {
       formData.append('icon', iconFile.value)
     }
     
     if (editMode.value) {
-      // Update existing domain
       await domainService.updateDomain(selectedDomain.value.id, formData)
     } else {
-      // Create new domain
       await domainService.createDomain(formData)
     }
     
-    // Close dialog and refresh list
     isAddEditDomainDialogVisible.value = false
     fetchDomains()
   } catch (error) {
@@ -167,32 +144,26 @@ const submitDomainForm = async () => {
   }
 }
 
-// ==================== ICON MANAGEMENT ===================
 
-// Trigger file input click
 const uploadIcon = () => {
   fileInput.value.click()
 }
 
-// Handle file selection
 const handleFileChange = (event) => {
   const file = event.target.files[0]
   if (!file) return
   
-  // Validate file size (800KB max)
   if (file.size > 800 * 1024) {
     formErrors.value = { icon: 'File size should be less than 800KB' }
     return
   }
   
-  // Validate file type
   const allowedTypes = ['image/jpeg', 'image/png', 'image/gif']
   if (!allowedTypes.includes(file.type)) {
     formErrors.value = { icon: 'Only JPG, PNG and GIF files are allowed' }
     return
   }
   
-  // Store file and create preview
   iconFile.value = file
   const reader = new FileReader()
   reader.onload = (e) => {
@@ -201,16 +172,14 @@ const handleFileChange = (event) => {
   reader.readAsDataURL(file)
 }
 
-// Remove selected icon
 const removeIcon = () => {
   iconFile.value = null
   iconPreview.value = null
   if (fileInput.value) {
-    fileInput.value.value = '' // Reset file input
+    fileInput.value.value = '' 
   }
 }
 
-// Delete icon from server for existing domain
 const deleteIcon = async () => {
   if (!editMode.value || !selectedDomain.value?.id) return
   
@@ -219,7 +188,6 @@ const deleteIcon = async () => {
     await domainService.removeIcon(selectedDomain.value.id)
     iconPreview.value = null
     
-    // Update the selectedDomain object to reflect icon removal
     selectedDomain.value.icon = null
     
     iconFile.value = null
@@ -235,15 +203,12 @@ const deleteIcon = async () => {
   }
 }
 
-// ==================== DOMAIN OPERATIONS ===================
 
-// Open delete confirmation dialog
 const confirmDelete = (domain) => {
   selectedDomain.value = domain
   isDeleteDialogVisible.value = true
 }
 
-// Delete selected domain
 const deleteDomain = async () => {
   isSubmitting.value = true
   
@@ -262,28 +227,23 @@ const deleteDomain = async () => {
   }
 }
 
-// ==================== PAGINATION & SORTING ===================
 
-// Change pagination
 const onPageChange = page => {
   currentPage.value = page
   fetchDomains()
 }
 
-// Change page size
 const onPageSizeChange = size => {
   pageSize.value = size
   currentPage.value = 1
   fetchDomains()
 }
 
-// Handle search
 const handleSearch = () => {
   currentPage.value = 1
   fetchDomains()
 }
 
-// Handle sort
 const sort = (key) => {
   if (sortBy.value.key === key) {
     sortBy.value.order = sortBy.value.order === 'asc' ? 'desc' : 'asc'
@@ -294,7 +254,6 @@ const sort = (key) => {
   fetchDomains()
 }
 
-// ==================== COMPUTED PROPERTIES ===================
 
 
 </script>

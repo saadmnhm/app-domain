@@ -14,7 +14,6 @@ definePage({
   },
 })
 
-// Setup auth system
 const authStore = useAuthStore()
 const route = useRoute()
 const router = useRouter()
@@ -33,7 +32,6 @@ const authThemeImg = blinkLoginImg
 
 
 
-// Add login function
 const handleLogin = async () => {
   try {
     isLoading.value = true
@@ -47,7 +45,6 @@ const handleLogin = async () => {
       localStorage.removeItem('remember_email')
     }
     
-    // Redirect after login
     const redirectPath = route.query.redirect?.toString() || '/'
     router.push(redirectPath)
   } catch (err) {
@@ -62,7 +59,6 @@ const handleLogin = async () => {
   }
 }
 
-// Check for remembered email
 onMounted(() => {
   const rememberedEmail = localStorage.getItem('remember_email')
   if (rememberedEmail) {
@@ -78,7 +74,6 @@ onMounted(() => {
     no-gutters
     class="auth-wrapper bg-surface"
   >
-    <!-- Left side image - no changes needed -->
     <VCol
       md="8"
       class="d-none d-md-flex"

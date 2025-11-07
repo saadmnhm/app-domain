@@ -2,7 +2,6 @@
 import { ref, computed, defineProps, defineEmits, onMounted, defineExpose } from 'vue'
 import clientContactService from '@/services/clientcontactService'
 
-// Define props and emits
 const props = defineProps({
   clientId: {
     type: [Number, String],
@@ -24,7 +23,6 @@ const props = defineProps({
 
 const emit = defineEmits(['saved', 'canceled'])
 
-// Form data
 const clientForm = ref({
   contact: {
     first_name: props.contactData?.first_name || '',
@@ -34,17 +32,15 @@ const clientForm = ref({
     fonction: props.contactData?.fonction || '',
     is_responsable: props.contactData?.is_responsable !== undefined ? props.contactData.is_responsable : true,
     client_id: props.clientId,
-    user_id: 1 // Should be replaced with the current authenticated user ID
+    user_id: 1 
   }
 })
 
-// Form state
 const formErrors = ref({})
 const isSubmitting = ref(false)
 const editMode = computed(() => props.isEditMode)
 const emailInputRef = ref(null)
 
-// Regular submit form function
 const submitContactForm = async () => {
   formErrors.value = {}
   isSubmitting.value = true
@@ -52,23 +48,19 @@ const submitContactForm = async () => {
   try {
     const contactData = { ...clientForm.value.contact }
     
-    // Ensure client_id is set
     contactData.client_id = props.clientId
     
     let response
     
     if (editMode.value && props.contactData?.id) {
-      // Update existing contact
       response = await clientContactService.updateContact(
         props.contactData.id, 
         contactData
       )
     } else {
-      // Create new contact
       response = await clientContactService.createContact(contactData)
     }
     
-    // Emit saved event with the saved data
     emit('saved', response.data)
     return response
     
@@ -78,14 +70,11 @@ const submitContactForm = async () => {
     if (error.response?.data?.errors) {
       formErrors.value = error.response.data.errors
     } else if (error.response?.data?.message) {
-      // Parse the SQL error message to provide a user-friendly message
       const errorMessage = error.response.data.message
       
       if (errorMessage.includes('Duplicate entry') && errorMessage.includes('email_unique')) {
-        // Handle duplicate email error specifically
         formErrors.value.email = ['This email address is already in use by another contact.']
         
-        // Focus the email input for convenience
         setTimeout(() => {
           if (emailInputRef.value) {
             emailInputRef.value.focus()
@@ -103,7 +92,6 @@ const submitContactForm = async () => {
   }
 }
 
-// This is the method called from the parent component
 const submitForm = async (overrideClientId = null) => {
   if (overrideClientId) {
     clientForm.value.contact.client_id = overrideClientId
@@ -111,12 +99,10 @@ const submitForm = async (overrideClientId = null) => {
   return await submitContactForm()
 }
 
-// Cancel form
 const cancelForm = () => {
   emit('canceled')
 }
 
-// Expose methods to parent component
 defineExpose({
   submitForm
 })

@@ -1,0 +1,20 @@
+// Write your overrides
+.layout-horizontal-nav .nav-link:not(.sub-item) a.router-link-active, .layout-horizontal-nav .nav-group:not(.sub-item).active > .popper-triggerer > .nav-group-label, .layout-nav-type-vertical .layout-vertical-nav .nav-link > .router-link-exact-active 
+{
+  background: linear-gradient(270deg, #18134c 0%, #18134ccc 100%) !important;
+}
+
+.backgorund_blink{
+  background-color: #18134c !important;
+}
+.color_blink{
+  color: #18134c !important;
+}
+
+.body .v-btn:not(.v-btn--disabled).bg-primary.v-btn--variant-elevated, body .v-btn:not(.v-btn--disabled).bg-primary.v-btn--variant-elevated:hover, body .v-btn:not(.v-btn--disabled).bg-primary.v-btn--variant-elevated:active, body .v-btn:not(.v-btn--disabled).bg-primary.v-btn--variant-elevated:focus{
+  background: linear-gradient(270deg, #18134c 0%, #18134ccc 100%) !important;
+}
+
+.body .v-btn:not(.v-btn--disabled).bg-primary.v-btn--variant-elevated, body .v-btn:not(.v-btn--disabled).bg-primary.v-btn--variant-elevated, body .v-btn:not(.v-btn--disabled).bg-primary.v-btn--variant-elevated:active, body .v-btn:not(.v-btn--disabled).bg-primary.v-btn--variant-elevated:focus{
+  background: linear-gradient(270deg, #18134c 0%, #18134ccc 100%) !important;
+}

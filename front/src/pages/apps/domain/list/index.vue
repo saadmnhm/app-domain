@@ -1,0 +1,686 @@
+<script setup>
+import { ref, computed, onMounted } from 'vue'
+import axios from 'axios'  // Added axios import
+import domainService from '@/services/domainService'
+
+// ==================== STATE MANAGEMENT ===================
+
+// Main data and UI state
+const domains = ref([])
+const isLoading = ref(false)
+const totalDomains = ref(0)
+const searchQuery = ref('')
+const selectedDomain = ref(null)
+const isAddEditDomainDialogVisible = ref(false)
+const isDeleteDialogVisible = ref(false)
+const editMode = ref(false)
+const sortBy = ref({ key: 'created_at', order: 'desc' })
+
+// Form state
+const domainForm = ref({
+  label: '',
+  description: '',
+})
+const formErrors = ref({})
+const isSubmitting = ref(false)
+
+// Pagination state
+const currentPage = ref(1)
+const pageSize = ref(10)
+const pageSizeOptions = [5, 10, 15, 20]
+
+// Icon upload state
+const fileInput = ref(null)
+const iconFile = ref(null)
+const iconPreview = ref(null)
+const uploadingIcon = ref(false)
+
+// ==================== DATA FETCHING ===================
+
+// Load domains from API
+const fetchDomains = async () => {
+  isLoading.value = true
+  try {
+    const params = {
+      page: currentPage.value,
+      per_page: pageSize.value,
+      search: searchQuery.value,
+      sort_by: sortBy.value.key,
+      sort_order: sortBy.value.order,
+    };
+
+    console.log('Fetching domains with params:', params);
+    const response = await domainService.getDomains(params);
+    console.log('API Response:', response);
+    
+    // $api returns body directly, not wrapped in { data }
+    if (Array.isArray(response)) {
+      domains.value = response;
+      totalDomains.value = response.length;
+    } else if (response && typeof response === 'object') {
+      // Handle Laravel pagination format
+      domains.value = response.data || [];
+      totalDomains.value = response.total || response.meta?.total || 0;
+    } else {
+      domains.value = [];
+      totalDomains.value = 0;
+    }
+
+    console.log('Domains after assignment:', domains.value);
+  } catch (error) {
+    console.error('Error fetching domains:', error);
+    domains.value = [];
+    totalDomains.value = 0;
+  } finally {
+    isLoading.value = false;
+  }
+}
+
+// Initialize data when component mounts
+onMounted(fetchDomains)
+
+// ==================== FORM OPERATIONS ===================
+
+// Reset form data
+const resetForm = () => {
+  domainForm.value = {
+    label: '',
+    description: '',
+  }
+  formErrors.value = {}
+  editMode.value = false
+  iconFile.value = null
+  iconPreview.value = null
+  if (fileInput.value) {
+    fileInput.value.value = ''
+  }
+}
+
+// Open dialog to add new domain
+const addNewDomain = () => {
+  resetForm()
+  isAddEditDomainDialogVisible.value = true
+}
+
+// Open dialog to edit existing domain
+const editDomain = (domain) => {
+  domainForm.value = {
+    label: domain.label,
+    description: domain.description || '',
+  }
+  selectedDomain.value = domain
+  editMode.value = true
+  
+  // Set icon preview if domain has an icon
+  if (domain.icon) {
+    iconPreview.value = null // Reset first
+    // Set after a brief delay to ensure reactivity
+    setTimeout(() => {
+      iconPreview.value = `http://127.0.0.1:8000${domain.icon}`
+    }, 100)
+  } else {
+    iconPreview.value = null
+  }
+
+  isAddEditDomainDialogVisible.value = true
+}
+
+// Submit form to create or update domain
+const submitDomainForm = async () => {
+  formErrors.value = {}
+  isSubmitting.value = true
+  
+  try {
+    // Use FormData to handle file uploads
+    const formData = new FormData()
+    formData.append('label', domainForm.value.label)
+    formData.append('description', domainForm.value.description || '')
+
+    // Add icon file if exists
+    if (iconFile.value) {
+      formData.append('icon', iconFile.value)
+    }
+    
+    if (editMode.value) {
+      // Update existing domain
+      await domainService.updateDomain(selectedDomain.value.id, formData)
+    } else {
+      // Create new domain
+      await domainService.createDomain(formData)
+    }
+    
+    // Close dialog and refresh list
+    isAddEditDomainDialogVisible.value = false
+    fetchDomains()
+  } catch (error) {
+    console.error('Error saving domain:', error)
+
+    if (error.response?.data?.errors) {
+      formErrors.value = error.response.data.errors
+    } else if (error.response?.data?.message) {
+      formErrors.value = { general: error.response.data.message }
+    } else {
+      formErrors.value = { general: 'An error occurred while saving the domain' }
+    }
+  } finally {
+    isSubmitting.value = false
+  }
+}
+
+// ==================== ICON MANAGEMENT ===================
+
+// Trigger file input click
+const uploadIcon = () => {
+  fileInput.value.click()
+}
+
+// Handle file selection
+const handleFileChange = (event) => {
+  const file = event.target.files[0]
+  if (!file) return
+  
+  // Validate file size (800KB max)
+  if (file.size > 800 * 1024) {
+    formErrors.value = { icon: 'File size should be less than 800KB' }
+    return
+  }
+  
+  // Validate file type
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif']
+  if (!allowedTypes.includes(file.type)) {
+    formErrors.value = { icon: 'Only JPG, PNG and GIF files are allowed' }
+    return
+  }
+  
+  // Store file and create preview
+  iconFile.value = file
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    iconPreview.value = e.target.result
+  }
+  reader.readAsDataURL(file)
+}
+
+// Remove selected icon
+const removeIcon = () => {
+  iconFile.value = null
+  iconPreview.value = null
+  if (fileInput.value) {
+    fileInput.value.value = '' // Reset file input
+  }
+}
+
+// Delete icon from server for existing domain
+const deleteIcon = async () => {
+  if (!editMode.value || !selectedDomain.value?.id) return
+  
+  try {
+    uploadingIcon.value = true
+    await domainService.removeIcon(selectedDomain.value.id)
+    iconPreview.value = null
+    
+    // Update the selectedDomain object to reflect icon removal
+    selectedDomain.value.icon = null
+    
+    iconFile.value = null
+    
+    if (fileInput.value) {
+      fileInput.value.value = ''
+    }
+  } catch (error) {
+    console.error('Error removing icon:', error)
+    formErrors.value = { icon: 'Failed to remove icon' }
+  } finally {
+    uploadingIcon.value = false
+  }
+}
+
+// ==================== DOMAIN OPERATIONS ===================
+
+// Open delete confirmation dialog
+const confirmDelete = (domain) => {
+  selectedDomain.value = domain
+  isDeleteDialogVisible.value = true
+}
+
+// Delete selected domain
+const deleteDomain = async () => {
+  isSubmitting.value = true
+  
+  try {
+    await domainService.deleteDomain(selectedDomain.value.id)
+    fetchDomains()
+    isDeleteDialogVisible.value = false
+  } catch (error) {
+    if (error.response?.status === 409) {
+      alert(error.response.data.message)
+    } else {
+      console.error('Error deleting category:', error)
+    }
+  } finally {
+    isSubmitting.value = false
+  }
+}
+
+// ==================== PAGINATION & SORTING ===================
+
+// Change pagination
+const onPageChange = page => {
+  currentPage.value = page
+  fetchDomains()
+}
+
+// Change page size
+const onPageSizeChange = size => {
+  pageSize.value = size
+  currentPage.value = 1
+  fetchDomains()
+}
+
+// Handle search
+const handleSearch = () => {
+  currentPage.value = 1
+  fetchDomains()
+}
+
+// Handle sort
+const sort = (key) => {
+  if (sortBy.value.key === key) {
+    sortBy.value.order = sortBy.value.order === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortBy.value.key = key
+    sortBy.value.order = 'asc'
+  }
+  fetchDomains()
+}
+
+// ==================== COMPUTED PROPERTIES ===================
+
+
+</script>
+
+<template>
+  <VCard>
+    <!-- Header -->
+    <VCardItem>
+      <VCardTitle>Domain D'activité</VCardTitle>
+      
+      <template #append>
+        <div class="d-flex align-center gap-4">
+          <!-- Search -->
+          <VTextField
+            v-model="searchQuery"
+            density="compact"
+            placeholder="Search domains"
+            append-inner-icon="tabler-search"
+            single-line
+            hide-details
+            @keyup.enter="handleSearch"
+            style="max-width: 300px; min-width: 250px;"
+          />
+          
+          <!-- Add New Button -->
+          <VBtn
+            prepend-icon="tabler-plus"
+            @click="addNewDomain"
+            color="primary"
+          >
+            Add New Domain
+          </VBtn>
+        </div>
+      </template>
+    </VCardItem>
+
+    <VDivider />
+
+    <!-- Table -->
+    <VRow v-if="!isLoading" class="px-3 pt-3 mb-5">
+      <VCol 
+        v-for="item in (domains || [])" 
+        :key="item.id" 
+        cols="12" 
+        md="6" 
+        lg="4" 
+        xl="3"
+      >
+        <VCard class="h-100">
+          <VCardItem>
+            <template #prepend>
+              <VAvatar 
+                color="primary" 
+                variant="tonal" 
+                size="42"
+                class="me-3"
+              >
+                <VImg 
+                  v-if="item.icon" 
+                  :src="`http://127.0.0.1:8000${item.icon}`"
+                  @error="(e) => e.target.src = ''"
+                />
+                <span v-else>{{ item.label.charAt(0).toUpperCase() }}</span>
+              </VAvatar>
+            </template>
+            
+            <VCardTitle>
+              {{ item.label }}
+            </VCardTitle>
+            
+           
+          </VCardItem>
+          
+          <VCardText class="pb-2">
+            <p class="text-body-2 mb-2">
+              {{ item.description || 'No description provided' }}
+            </p>
+            
+            <div class="d-flex align-center justify-space-between mt-2">
+              <span class="text-caption text-medium-emphasis">
+                ID: #{{ item.id }}
+              </span>
+              
+              <span class="text-caption text-medium-emphasis">
+                Created: {{ new Date(item.created_at).toLocaleDateString() }}
+              </span>
+            </div>
+          </VCardText>
+          
+          <VDivider />
+          
+          <VCardActions>
+            <VSpacer />
+            <VBtn
+              variant="text"
+              size="small"
+              color="primary"
+              @click="editDomain(item)"
+            >
+              <VIcon icon="tabler-edit" class="me-1" size="16" />
+              Edit
+            </VBtn>
+            
+            <VBtn
+              variant="text"
+              size="small"
+              color="error"
+              @click="confirmDelete(item)"
+            >
+              <VIcon icon="tabler-trash" class="me-1" size="16" />
+              Delete
+            </VBtn>
+          </VCardActions>
+        </VCard>
+      </VCol>
+    </VRow>
+
+    <!-- Loading State -->
+    <VRow v-else class="pa-3">
+      <VCol v-for="n in 8" :key="n" cols="12" md="6" lg="4" xl="3">
+        <VCard class="h-100">
+          <VCardItem>
+            <VSkeleton type="avatar" class="me-3" />
+            <VSkeleton type="text" width="70%" />
+          </VCardItem>
+          <VCardText>
+            <VSkeleton type="text" class="mb-2" />
+            <VSkeleton type="text" width="40%" />
+          </VCardText>
+          <VCardActions>
+            <VSkeleton type="button" width="80px" class="ms-auto me-2" />
+            <VSkeleton type="button" width="80px" />
+          </VCardActions>
+        </VCard>
+      </VCol>
+    </VRow>
+
+    <!-- Empty State -->
+    <VRow v-if="!isLoading && (!domains || domains.length === 0)">
+      <VCol cols="12">
+        <VCard class="text-center py-8">
+          <VIcon
+            size="60"
+            icon="tabler-mood-empty"
+            class="text-medium-emphasis mb-4"
+          />
+          <h5 class="text-h6 text-medium-emphasis">No domains found</h5>
+          <p class="text-body-1 text-medium-emphasis mb-6">
+            Try adjusting your search or add a new domain
+          </p>
+          <VBtn
+            prepend-icon="tabler-plus"
+            @click="addNewDomain"
+            color="primary"
+          >
+            Add New Domain
+          </VBtn>
+        </VCard>
+      </VCol>
+    </VRow>
+    
+    <!-- Pagination -->
+    <div v-if="totalDomains > pageSize" class="d-flex align-center justify-space-between px-6 py-4">
+      <div>
+        <span class="text-body-2 text-medium-emphasis">
+          Showing {{ (currentPage - 1) * pageSize + 1 }} to {{ Math.min(currentPage * pageSize, totalDomains) }} of {{ totalDomains }} entries
+        </span>
+        
+        <VSelect
+          v-model="pageSize"
+          :items="pageSizeOptions"
+          variant="outlined"
+          density="compact"
+          hide-details
+          class="d-inline-block ms-4"
+          style="width: 80px;"
+          @update:modelValue="onPageSizeChange"
+        />
+      </div>
+      
+      <VPagination
+        v-model="currentPage"
+        :length="Math.ceil(totalDomains / pageSize)"
+        :total-visible="5"
+        @update:modelValue="onPageChange"
+      />
+    </div>
+  </VCard>
+  
+  <VDialog
+    v-model="isAddEditDomainDialogVisible"
+    max-width="600px"
+    persistent
+  >
+    <VCard>
+      <VCardTitle class="d-flex justify-space-between align-center pa-4">
+        {{ editMode ? 'Edit Domain' : 'Add New Domain' }}
+
+        <VBtn
+          icon
+          variant="text"
+          color="default"
+          @click="isAddEditDomainDialogVisible = false"
+        >
+          <VIcon size="24" icon="tabler-x" />
+        </VBtn>
+      </VCardTitle>
+      
+      <VDivider />
+      
+      <VCardText class="pa-4">
+        <VAlert
+          v-if="formErrors.general"
+          type="error"
+          variant="tonal"
+          closable
+          class="mb-4"
+        >
+          {{ formErrors.general }}
+        </VAlert>
+
+        <VForm @submit.prevent="submitDomainForm">
+          <VRow>
+            <!-- Icon Upload -->
+            <VCol cols="12">
+              <p class="text-body-1 font-weight-medium mb-2">Domain Icon</p>
+              
+              <div class="d-flex align-center gap-4">
+                <VAvatar size="80" rounded="rounded" class="bg-light-primary">
+                  <VImg 
+                    v-if="iconPreview" 
+                    :src="iconPreview"
+                    @error="(e) => e.target.src = ''"
+                  />
+                  <VImg 
+                    v-else-if="editMode && selectedDomain?.icon" 
+                    :src="`http://127.0.0.1:8000${selectedDomain.icon}`"
+                    @error="(e) => e.target.src = ''"
+                  />
+                  <VIcon v-else icon="tabler-world" size="40" />
+                </VAvatar>
+                
+                <div>
+                  <!-- Hidden file input -->
+                  <input
+                    ref="fileInput"
+                    type="file"
+                    class="d-none"
+                    accept="image/jpeg,image/png,image/gif"
+                    @change="handleFileChange"
+                  />
+                  
+                  <!-- Upload button -->
+                  <VBtn
+                    color="primary"
+                    variant="tonal"
+                    prepend-icon="tabler-upload"
+                    class="mb-1"
+                    @click="uploadIcon"
+                    :disabled="uploadingIcon"
+                  >
+                    Upload Icon
+                  </VBtn>
+                  
+                  <!-- Remove button - fixed condition -->
+                  <VBtn
+                    v-if="iconPreview || (editMode && selectedDomain?.icon)"
+                    variant="outlined"
+                    color="error"
+                    class="ms-2 mb-1"
+                    @click="editMode && selectedDomain?.icon ? deleteIcon() : removeIcon()"
+                    :loading="uploadingIcon"
+                  >
+                    Remove
+                  </VBtn>
+                  
+                  <div class="text-caption mt-1">
+                    Allowed JPG, GIF or PNG. Max size of 800K
+                  </div>
+                  
+                  <!-- Icon Error -->
+                  <div v-if="formErrors.icon" class="text-error text-caption mt-1">
+                    {{ formErrors.icon }}
+                  </div>
+                </div>
+              </div>
+            </VCol>
+            
+            <!-- Label Field -->
+            <VCol cols="12">
+              <VTextField
+                v-model="domainForm.label"
+                label="Domain Name"
+                :error-messages="formErrors.label"
+                required
+                autofocus
+              />
+            </VCol>
+            
+            <!-- Description Field -->
+            <VCol cols="12">
+              <VTextarea
+                v-model="domainForm.description"
+                label="Description"
+                :error-messages="formErrors.description"
+                rows="3"
+              />
+            </VCol>
+            
+           
+            
+          </VRow>
+          
+          <!-- Form Actions -->
+          <div class="d-flex justify-end gap-3 mt-3">
+            <VBtn
+              variant="outlined"
+              color="secondary"
+              @click="isAddEditDomainDialogVisible = false"
+              :disabled="isSubmitting"
+            >
+              Cancel
+            </VBtn>
+            
+            <VBtn
+              color="primary"
+              :loading="isSubmitting"
+              type="submit"
+            >
+              {{ editMode ? 'Update' : 'Create' }}
+            </VBtn>
+          </div>
+        </VForm>
+      </VCardText>
+    </VCard>
+  </VDialog>
+  
+  <!-- Delete Confirmation Dialog -->
+  <VDialog
+    v-model="isDeleteDialogVisible"
+    max-width="500"
+  >
+    <VCard>
+      <VCardTitle class="text-h5">Delete Domain</VCardTitle>
+      
+      <VCardText>
+        Are you sure you want to delete the domain <strong>{{ selectedDomain?.label }}</strong>?<br>
+        This action cannot be undone.
+      </VCardText>
+      
+      <VCardActions>
+        <VSpacer />
+        
+        <VBtn
+          color="secondary"
+          variant="text"
+          @click="isDeleteDialogVisible = false"
+          :disabled="isSubmitting"
+        >
+          Cancel
+        </VBtn>
+        
+        <VBtn
+          color="error"
+          variant="elevated"
+          :loading="isSubmitting"
+          @click="deleteDomain"
+        >
+          Delete
+        </VBtn>
+      </VCardActions>
+    </VCard>
+  </VDialog>
+</template>
+
+<style scoped>
+.sortable-chip {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sortable-chip:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+.v-img__img--cover{
+  object-fit: fill;
+}
+</style>

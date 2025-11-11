@@ -113,7 +113,7 @@ const toggleReadUnread = (isSeen: boolean, Id: number) => {
           <VList class="notification-list rounded-0 py-0">
             <template
               v-for="(notification, index) in props.notifications"
-              :key="notification.title"
+              :key="notification.id"
             >
               <VDivider v-if="index > 0" />
               <VListItem

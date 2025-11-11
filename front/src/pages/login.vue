@@ -23,6 +23,7 @@ const error = ref('')
 const form = ref({
   email: '',
   password: '',
+  is_active: true,
   remember: false,
 })
 
@@ -36,20 +37,32 @@ const handleLogin = async () => {
   try {
     isLoading.value = true
     error.value = ''
-    
-    await authStore.login(form.value.email, form.value.password)
-    
+
+    const loginResult = await authStore.login(form.value.email, form.value.password)
+
+    const user = loginResult?.user ?? (authStore.user ?? null)
+    if (user && (user.is_active === 0 || user.is_active === '0' || user.is_active === false)) {
+      error.value = 'Compte non actif.'
+      return
+    }
+
     if (form.value.remember) {
       localStorage.setItem('remember_email', form.value.email)
     } else {
       localStorage.removeItem('remember_email')
     }
-    
+
     const redirectPath = route.query.redirect?.toString() || '/'
     router.push(redirectPath)
   } catch (err) {
     console.error('Login error:', err)
-    if (err.response?.data?.message) {
+
+    const backendMessage = err?.response?.data?.message ?? err?.data?.message ?? ''
+    const backendMsgLower = String(backendMessage).toLowerCase()
+
+    if (backendMsgLower.includes('inactive') || backendMsgLower.includes('not active') || backendMsgLower.includes('non actif') || backendMsgLower.includes('is_active')) {
+      error.value = 'Compte non actif.'
+    } else if (err.response?.data?.message) {
       error.value = err.response.data.message
     } else {
       error.value = 'Invalid login credentials. Please try again.'

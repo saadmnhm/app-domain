@@ -119,7 +119,7 @@ const submitCombinedForm = async () => {
     
     const clientResponse = await clientModalRef.value.submitForm()
     
-    const clientId = editMode.value ? selectedClient.value.id : clientResponse.data.id
+    const clientId = editMode.value ? selectedClient.value.id : clientResponse.id
     clientIdForContact.value = clientId
     
     await nextTick()
@@ -183,7 +183,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <VCard>
+  <VCard :style="viewMode === 'table' ? { transition: 'none' } : {}"  :elevation="viewMode !== 'table' ? 0 : undefined" :color="viewMode !== 'table' ? 'transparent' : null">
     <!-- Header -->
     <VCardItem>
       <VCardTitle>Clients</VCardTitle>
@@ -237,7 +237,7 @@ onMounted(() => {
         lg="4" 
         xl="3"
       >
-        <VCard class="h-100">
+        <VCard class="h-100" >
           <VCardItem>
             <template #prepend>
               <VAvatar 

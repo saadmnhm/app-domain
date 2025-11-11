@@ -2,16 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
-use App\Models\User;
 
 class AuthController extends Controller
 {
     public function login(Request $request)
     {
-        // Add this to debug the incoming request
         \Log::info('Login attempt', ['email' => $request->email]);
 
         $credentials = $request->validate([
@@ -21,6 +20,11 @@ class AuthController extends Controller
 
         if (Auth::attempt($credentials)) {
             $user = Auth::user();
+            $is_active=$user->is_active;
+            if(!$is_active){
+                \Log::warning('Inactive user login attempt', ['email' => $request->email]);
+                return response()->json(['message' => 'User account is inactive'], 403);    
+            }
             $token = $user->createToken('auth_token')->plainTextToken;
 
             return response()->json([
@@ -29,7 +33,6 @@ class AuthController extends Controller
             ]);
         }
 
-        // Add detailed error message
         return response()->json(['message' => 'Invalid login credentials'], 401);
     }
 

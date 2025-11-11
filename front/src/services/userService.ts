@@ -9,10 +9,10 @@ const userService = {
     return $api(`/users/${id}`)
   },
 
-  createUser(userData: any) {
-    return $api('/users', {
+  async createUser(formData: FormData) {
+    return await $api('/users', {
       method: 'POST',
-      body: userData
+      body: formData,
     })
   },
 

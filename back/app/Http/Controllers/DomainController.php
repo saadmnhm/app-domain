@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 use App\Models\Domain;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
 class DomainController extends Controller
@@ -15,39 +17,84 @@ class DomainController extends Controller
             $query->withTrashed();
         }
 
-        $domains = $query->withCount('clients')->get();
+        $query->withCount('clients');
+        
+
+        if ($request->has('search')) {
+            $search = $request->input('search');
+            $query->where('label', 'like', "%{$search}%");
+        }
+        
+        $perPage = $request->input('per_page', 15);
+        
+        $domains = $query->paginate($perPage);
+        
         return response()->json($domains);
     }
 
     public function store(Request $request)
     {
-        $validated = $request->validate([
-            'label' => 'required|string|max:255',
+        // Validate request with icon (optional)
+        $validator = Validator::make($request->all(), [
+            'label' => 'required|string|max:255|unique:domaine_dactivites,label',
             'description' => 'nullable|string|max:1000',
+            'is_active' => 'sometimes|boolean',
+            'icon' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
         ]);
 
-        $domainData = $validated;
-
-        // Handle icon upload if present
-        if ($request->hasFile('icon')) {
-            // Create icons directory if it doesn't exist
-            $iconPath = public_path('assets/icons');
-            if (!file_exists($iconPath)) {
-                mkdir($iconPath, 0755, true);
-            }
-
-            // Generate icon name
-            $iconName = time() . '_' . uniqid() . '.' . $request->icon->extension();
-
-            // Move the uploaded file
-            $request->file('icon')->move($iconPath, $iconName);
-
-            // Add icon path to category data
-            $domainData['icon'] = '/assets/icons/' . $iconName;
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $domain = Domain::create($domainData);
-        return response()->json($domain, 201);
+        // Handle icon upload if present
+        $iconPath = null;
+        if ($request->hasFile('icon')) {
+            $iconDir = public_path('assets/icons');
+            if (!file_exists($iconDir)) {
+                mkdir($iconDir, 0755, true);
+            }
+
+            $iconName = uniqid() . '_' . time() . '.' . $request->icon->extension();
+            $request->file('icon')->move($iconDir, $iconName);
+            $iconPath = '/assets/icons/' . $iconName;
+        }
+
+        try {
+            // Create the domain
+            $domain = Domain::create([
+                'label' => $request->label,
+                'description' => $request->description,
+                'is_active' => $request->is_active ?? true,
+                'icon' => $iconPath,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'domain' => $domain,
+                'message' => 'Domain created successfully.'
+            ], 201);
+        } catch (QueryException $e) {
+            // Clean up uploaded icon if domain creation fails
+            if ($iconPath && file_exists(public_path(ltrim($iconPath, '/')))) {
+                unlink(public_path(ltrim($iconPath, '/')));
+            }
+
+            if ($e->errorInfo[1] == 1062) {
+                return response()->json([
+                    'success' => false,
+                    'errors' => [
+                        'label' => ['A domain with this name already exists.']
+                    ],
+                    'message' => 'A domain with this name already exists.'
+                ], 422);
+            }
+
+            Log::error("Error creating domain: {$e->getMessage()}");
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while creating the domain.'
+            ], 500);
+        }
     }
 
     public function show($id)
@@ -60,19 +107,24 @@ class DomainController extends Controller
     {
         $domain = Domain::findOrFail($id);
 
-        $validated = $request->validate([
-            'label' => 'string|max:255' . $domain->id,
+        // Validate request with unique check excluding current domain
+        $validator = Validator::make($request->all(), [
+            'label' => 'required|string|max:255|unique:domaine_dactivites,label,' . $id,
             'description' => 'nullable|string|max:1000',
+            'is_active' => 'sometimes|boolean',
+            'icon' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
         ]);
 
-        $domainData = $validated;
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
 
         // Handle icon upload if present
+        $iconPath = $domain->icon; // Keep existing icon by default
         if ($request->hasFile('icon')) {
-            // Create icons directory if it doesn't exist
-            $iconPath = public_path('assets/icons');
-            if (!file_exists($iconPath)) {
-                mkdir($iconPath, 0755, true);
+            $iconDir = public_path('assets/icons');
+            if (!file_exists($iconDir)) {
+                mkdir($iconDir, 0755, true);
             }
 
             // Delete old icon if exists
@@ -80,25 +132,54 @@ class DomainController extends Controller
                 unlink(public_path(ltrim($domain->icon, '/')));
             }
 
-            // Generate icon name
             $iconName = $id . '_' . time() . '.' . $request->icon->extension();
-
-            // Move the uploaded file
-            $request->file('icon')->move($iconPath, $iconName);
-
-            // Add icon path to domain data
-            $domainData['icon'] = '/assets/icons/' . $iconName;
+            $request->file('icon')->move($iconDir, $iconName);
+            $iconPath = '/assets/icons/' . $iconName;
         }
 
-        $domain->update($domainData);
-        return response()->json($domain);
+        try {
+            // Update the domain
+            $domain->update([
+                'label' => $request->label,
+                'description' => $request->description,
+                'is_active' => $request->is_active ?? $domain->is_active,
+                'icon' => $iconPath,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'domain' => $domain,
+                'message' => 'Domain updated successfully.'
+            ]);
+        } catch (QueryException $e) {
+            // Clean up uploaded icon if update fails
+            if ($request->hasFile('icon') && $iconPath && file_exists(public_path(ltrim($iconPath, '/')))) {
+                unlink(public_path(ltrim($iconPath, '/')));
+            }
+
+            if ($e->errorInfo[1] == 1062) {
+                return response()->json([
+                    'success' => false,
+                    'errors' => [
+                        'label' => ['A domain with this name already exists.']
+                    ],
+                    'message' => 'A domain with this name already exists.'
+                ], 422);
+            }
+
+            Log::error("Error updating domain: {$e->getMessage()}");
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while updating the domain.'
+            ], 500);
+        }
     }
+
 
     public function destroy($id)
     {
         $domain = Domain::findOrFail($id);
 
-        // Check if any clients are using this domain
         if ($domain->clients()->count() > 0) {
             return response()->json([
                 'success' => false,
@@ -122,24 +203,19 @@ class DomainController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        // Create icons directory if it doesn't exist
         $iconPath = public_path('assets/icons');
         if (!file_exists($iconPath)) {
             mkdir($iconPath, 0755, true);
         }
 
-        // Delete old icon if exists
         if ($domain->icon && file_exists(public_path(ltrim($domain->icon, '/')))) {
             unlink(public_path(ltrim($domain->icon, '/')));
         }
 
-        // Generate icon name
         $iconName = $id . '_' . time() . '.' . $request->icon->extension();
 
-        // Move the uploaded file to assets directory
         $request->file('icon')->move($iconPath, $iconName);
 
-        // Update domain record with icon path
         $domain->icon = '/assets/icons/' . $iconName;
         $domain->save();
 
@@ -154,20 +230,17 @@ class DomainController extends Controller
     {
         $domain = Domain::findOrFail($id);
 
-        // Check if domain has an icon
         if (!$domain->icon) {
             return response()->json([
                 'message' => 'Domain does not have an icon'
             ], 400);
         }
 
-        // Delete icon file if exists
         $iconPath = public_path(ltrim($domain->icon, '/'));
         if (file_exists($iconPath)) {
             unlink($iconPath);
         }
 
-        // Clear icon path from domain record
         $domain->icon = null;
         $domain->save();
 
@@ -176,5 +249,4 @@ class DomainController extends Controller
             'message' => 'Icon removed successfully'
         ]);
     }
-
 }

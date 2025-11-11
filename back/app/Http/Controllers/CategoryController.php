@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 use App\Models\Category;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
 class CategoryController extends Controller
@@ -11,45 +13,84 @@ class CategoryController extends Controller
     {
         $query = Category::query();
 
-        // Include soft-deleted categories if requested
         if ($request->has('withTrashed') && $request->withTrashed) {
             $query->withTrashed();
         }
 
-        $categories = $query->withCount('clients')->get();
+        $query->withCount('clients');
+
+
+        if ($request->has('search')) {
+            $search = $request->input('search');
+            $query->where('label', 'like', "%{$search}%");
+        }
+        
+        $perPage = $request->input('per_page', 15);
+        
+        $categories = $query->paginate($perPage);
+        
         return response()->json($categories);
     }
 
     public function store(Request $request)
     {
-        $validated = $request->validate([
-            'label' => 'required|string|max:255|unique:clientcategories,label,',
+        $validator = Validator::make($request->all(), [
+            'label' => 'required|string|max:255|unique:clientcategories,label',
             'description' => 'nullable|string|max:1000',
             'is_active' => 'sometimes|boolean',
+            'icon' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
         ]);
 
-        $categoryData = $validated;
-
-        // Handle icon upload if present
-        if ($request->hasFile('icon')) {
-            // Create icons directory if it doesn't exist
-            $iconPath = public_path('assets/icons');
-            if (!file_exists($iconPath)) {
-                mkdir($iconPath, 0755, true);
-            }
-
-            // Generate icon name
-            $iconName = time() . '_' . uniqid() . '.' . $request->icon->extension();
-
-            // Move the uploaded file
-            $request->file('icon')->move($iconPath, $iconName);
-
-            // Add icon path to category data
-            $categoryData['icon'] = '/assets/icons/' . $iconName;
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $category = Category::create($categoryData);
-        return response()->json($category, 201);
+        $iconPath = null;
+        if ($request->hasFile('icon')) {
+            $iconDir = public_path('assets/icons');
+            if (!file_exists($iconDir)) {
+                mkdir($iconDir, 0755, true);
+            }
+
+            $iconName = uniqid() . '_' . time() . '.' . $request->icon->extension();
+            $request->file('icon')->move($iconDir, $iconName);
+            $iconPath = '/assets/icons/' . $iconName;
+        }
+
+        try {
+            $category = Category::create([
+                'label' => $request->label,
+                'description' => $request->description,
+                'is_active' => $request->is_active ?? true,
+                'icon' => $iconPath,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'category' => $category,
+                'message' => 'Category created successfully.'
+            ], 201);
+        } catch (QueryException $e) {
+            if ($iconPath && file_exists(public_path(ltrim($iconPath, '/')))) {
+                unlink(public_path(ltrim($iconPath, '/')));
+            }
+
+            if ($e->errorInfo[1] == 1062) {
+                return response()->json([
+                    'success' => false,
+                    'errors' => [
+                        'label' => ['A category with this name already exists.']
+                    ],
+                    'message' => 'A category with this name already exists.'
+                ], 422);
+            }
+
+            Log::error("Error creating category: {$e->getMessage()}");
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while creating the category.'
+            ], 500);
+        }
     }
 
     public function show($id)
@@ -62,25 +103,24 @@ class CategoryController extends Controller
     {
         $category = Category::findOrFail($id);
 
+        // Validate request with unique check excluding current category
         $validator = Validator::make($request->all(), [
             'label' => 'required|string|max:255|unique:clientcategories,label,' . $id,
             'description' => 'nullable|string|max:1000',
             'is_active' => 'sometimes|boolean',
-            'icon' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:800',
+            'icon' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
         ]);
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $categoryData = $request->only(['label', 'description', 'is_active']);
-
         // Handle icon upload if present
+        $iconPath = $category->icon; // Keep existing icon by default
         if ($request->hasFile('icon')) {
-            // Create icons directory if it doesn't exist
-            $iconPath = public_path('assets/icons');
-            if (!file_exists($iconPath)) {
-                mkdir($iconPath, 0755, true);
+            $iconDir = public_path('assets/icons');
+            if (!file_exists($iconDir)) {
+                mkdir($iconDir, 0755, true);
             }
 
             // Delete old icon if exists
@@ -88,17 +128,47 @@ class CategoryController extends Controller
                 unlink(public_path(ltrim($category->icon, '/')));
             }
 
-            // Generate icon name and store file
             $iconName = $id . '_' . time() . '.' . $request->icon->extension();
-            $request->file('icon')->move($iconPath, $iconName);
-
-            // Add icon path to category data
-            $categoryData['icon'] = '/assets/icons/' . $iconName;
+            $request->file('icon')->move($iconDir, $iconName);
+            $iconPath = '/assets/icons/' . $iconName;
         }
 
-        $category->update($categoryData);
+        try {
+            // Update the category
+            $category->update([
+                'label' => $request->label,
+                'description' => $request->description,
+                'is_active' => $request->is_active ?? $category->is_active,
+                'icon' => $iconPath,
+            ]);
 
-        return response()->json($category);
+            return response()->json([
+                'success' => true,
+                'category' => $category,
+                'message' => 'Category updated successfully.'
+            ]);
+        } catch (QueryException $e) {
+            // Clean up uploaded icon if update fails
+            if ($request->hasFile('icon') && $iconPath && file_exists(public_path(ltrim($iconPath, '/')))) {
+                unlink(public_path(ltrim($iconPath, '/')));
+            }
+
+            if ($e->errorInfo[1] == 1062) {
+                return response()->json([
+                    'success' => false,
+                    'errors' => [
+                        'label' => ['A category with this name already exists.']
+                    ],
+                    'message' => 'A category with this name already exists.'
+                ], 422);
+            }
+
+            Log::error("Error updating category: {$e->getMessage()}");
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while updating the category.'
+            ], 500);
+        }
     }
 
     public function destroy($id)
@@ -128,24 +198,19 @@ class CategoryController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        // Create icons directory if it doesn't exist
         $iconPath = public_path('assets/icons');
         if (!file_exists($iconPath)) {
             mkdir($iconPath, 0755, true);
         }
 
-        // Delete old icon if exists
         if ($category->icon && file_exists(public_path(ltrim($category->icon, '/')))) {
             unlink(public_path(ltrim($category->icon, '/')));
         }
 
-        // Generate icon name
         $iconName = $id . '_' . time() . '.' . $request->icon->extension();
 
-        // Move the uploaded file to assets directory
         $request->file('icon')->move($iconPath, $iconName);
 
-        // Update category record with icon path
         $category->icon = '/assets/icons/' . $iconName;
         $category->save();
 
@@ -160,20 +225,17 @@ class CategoryController extends Controller
     {
         $category = Category::findOrFail($id);
 
-        // Check if category has an icon
         if (!$category->icon) {
             return response()->json([
                 'message' => 'Category does not have an icon'
             ], 400);
         }
 
-        // Delete icon file if exists
         $iconPath = public_path(ltrim($category->icon, '/'));
         if (file_exists($iconPath)) {
             unlink($iconPath);
         }
 
-        // Clear icon path from category record
         $category->icon = null;
         $category->save();
 

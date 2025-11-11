@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, computed } from 'vue';
 import userService from '@/services/userService';
-import AddNewUserDrawer from '@/views/apps/user/list/AddNewUserDrawer.vue';
+import AddNewUserDrawer from '@/pages/apps/user/components/AddNewUserDrawer.vue';
 import type { UserProperties } from '@db/apps/users/types';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/authStore' 
@@ -107,9 +107,27 @@ const fetchUsers = async () => {
 };
 
 
-const addNewUser = (userData: UserProperties) => {
-  fetchUsers(); 
-};
+const addNewUser = (payload: any) => {
+  const raw = payload?.user ?? (payload?.data ?? payload)
+
+  if (!raw || !raw.id) {
+    fetchUsers()
+    return
+  }
+
+  const mapped = {
+    id: raw.id,
+    firstName: raw.first_name ?? raw.firstName ?? '',
+    lastName: raw.last_name ?? raw.lastName ?? '',
+    email: raw.email ?? '',
+    role: raw.role ?? 'user',
+    is_active: typeof raw.is_active !== 'undefined' ? Number(raw.is_active) : 0,
+    avatar: raw.avatar ?? null,
+  }
+
+  users.value = [mapped, ...users.value]
+  totalUsers.value = (typeof totalUsers.value === 'number' ? totalUsers.value + 1 : 1)
+}
 
 watch([page, itemsPerPage,], () => {
   fetchUsers();
@@ -134,24 +152,9 @@ const filteredUsers = computed(() => {
 
 <template>
   <section>
-    <VCard>
-      <VCardText class="d-flex flex-wrap gap-4">
-        <div class="d-flex gap-2 align-center">
-          <p class="text-body-1 mb-0">Show</p>
-          <AppSelect
-            :model-value="itemsPerPage"
-            :items="[
-              { value: 10, title: '10' },
-              { value: 25, title: '25' },
-              { value: 50, title: '50' },
-              { value: 100, title: '100' },
-              { value: -1, title: 'All' },
-            ]"
-            density="compact"
-            style="inline-size: 5.5rem;"
-            @update:model-value="itemsPerPage = parseInt($event, 10)"
-          />
-        </div>
+    <VCard color="transparent" elevation="0">
+      <VCardText class="d-flex flex-wrap gap-4 ">
+       
 
         <VSpacer />
 
@@ -164,7 +167,6 @@ const filteredUsers = computed(() => {
         </div>
       </VCardText>
 
-      <VDivider />
       
       <!-- Loading state -->
       <VProgressLinear
@@ -293,13 +295,7 @@ const filteredUsers = computed(() => {
         </VRow>
 
         <!-- Pagination -->
-        <div class="d-flex justify-center mt-6" v-if="totalUsers > itemsPerPage">
-          <VPagination
-            v-model="page"
-            :length="Math.ceil(totalUsers / itemsPerPage)"
-            :total-visible="5"
-          />
-        </div>
+        
       </VCardText>
     </VCard>
 

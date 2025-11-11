@@ -17,6 +17,7 @@ class Domain extends Model
         'label',
         'description',
         'icon',
+        'is_active',
     ];
 
     protected $casts = [

@@ -3,18 +3,37 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 
 class UserController extends Controller
 {
     /**
      * Display a listing of users.
      */
-    public function index()
+    public function index(Request $request)
     {
-        $users = User::all();
+        $perPage = $request->input('per_page', 15);
+        
+        $query = User::select(['id', 'first_name', 'last_name', 'email', 'phone', 'role', 'is_active', 'avatar', 'created_at'])
+            ->orderBy('id', 'desc');
+        
+        //  Add search if provided
+        if ($request->has('search')) {
+            $search = $request->input('search');
+            $query->where(function($q) use ($search) {
+                $q->where('first_name', 'like', "%{$search}%")
+                  ->orWhere('last_name', 'like', "%{$search}%")
+                  ->orWhere('email', 'like', "%{$search}%");
+            });
+        }
+        
+        $users = $query->paginate($perPage);
+        
         return response()->json($users);
     }
 
@@ -26,49 +45,72 @@ class UserController extends Controller
         $validator = Validator::make($request->all(), [
             'first_name' => 'required|string|max:255',
             'last_name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users',
-            'phone' => 'sometimes|string|max:20',
-            'password' => 'required|string|min:8',
+            'email' => 'required|string|email|max:255|unique:users,email',
+            'phone' => 'nullable|string|max:20',
+            'password' => 'nullable|string|min:8',
             'role' => 'required|string',
-            'is_active' => 'sometimes|boolean',
-            'avatar' => 'sometimes|image|mimes:jpeg,png,jpg,gif|max:2048',
+            'is_active' => 'nullable|in:0,1,true,false',
+            'avatar' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
         ]);
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $userData = [
-            'first_name' => $request->first_name,
-            'last_name' => $request->last_name,
-            'email' => $request->email,
-            'phone' => $request->phone,
-            'password' => Hash::make($request->password),
-            'role' => $request->role,
-            'is_active' => $request->has('is_active') ? $request->is_active : 1,
-        ];
+        $data = $validator->validated();
+
+        if (!empty($data['password'])) {
+            $data['password'] = Hash::make($data['password']);
+        } else {
+            unset($data['password']);
+        }
+        
+        $data['is_active'] = isset($data['is_active']) ? (bool)$data['is_active'] : false;
 
         // Handle avatar upload if present
+        $avatarPath = null;
         if ($request->hasFile('avatar')) {
-            // Create avatars directory if it doesn't exist
-            $avatarPath = public_path('assets/avatars');
-            if (!file_exists($avatarPath)) {
-                mkdir($avatarPath, 0755, true);
+            $avatarDir = public_path('assets/avatars');
+            if (!file_exists($avatarDir)) {
+                mkdir($avatarDir, 0755, true);
             }
 
-            // Generate avatar name
             $avatarName = time() . '_' . uniqid() . '.' . $request->avatar->extension();
-
-            // Move the uploaded file
-            $request->file('avatar')->move($avatarPath, $avatarName);
-
-            // Add avatar path to user data
-            $userData['avatar'] = '/assets/avatars/' . $avatarName;
+            $request->file('avatar')->move($avatarDir, $avatarName);
+            $avatarPath = '/assets/avatars/' . $avatarName;
+            $data['avatar'] = $avatarPath;
         }
 
-        $user = User::create($userData);
+        try {
+            $user = User::create($data);
 
-        return response()->json($user, 201);
+            return response()->json([
+                'success' => true,
+                'user' => $user,
+                'message' => 'User created successfully.'
+            ], 201);
+        } catch (QueryException $e) {
+            // Clean up uploaded avatar if user creation fails
+            if ($avatarPath && file_exists(public_path(ltrim($avatarPath, '/')))) {
+                unlink(public_path(ltrim($avatarPath, '/')));
+            }
+
+            if ($e->errorInfo[1] == 1062) {
+                return response()->json([
+                    'success' => false,
+                    'errors' => [
+                        'email' => ['A user with this email already exists.']
+                    ],
+                    'message' => 'A user with this email already exists.'
+                ], 422);
+            }
+
+            Log::error("Error creating user: {$e->getMessage()}");
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while creating the user.'
+            ], 500);
+        }
     }
 
     /**
@@ -77,7 +119,11 @@ class UserController extends Controller
     public function show(string $id)
     {
         $user = User::findOrFail($id);
-        return response()->json($user);
+
+        return response()->json(array_merge(
+            $user->toArray(),
+            ['has_password' => !empty($user->password)]
+        ));
     }
 
     /**
@@ -88,7 +134,16 @@ class UserController extends Controller
         try {
             $user = User::findOrFail($id);
 
-            // Common names are 'is_active', 'active', or 'status'
+            $willBeActive = !(bool)($user->is_active ?? $user->active ?? ($user->status === 'active' ?? false));
+
+            if ($willBeActive && empty($user->password)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Cannot activate user without a password. Please set a password first.',
+                    'is_active' => (isset($user->is_active) ? $user->is_active : 0),
+                ], 400);
+            }
+
             if (isset($user->is_active)) {
                 $user->is_active = !$user->is_active;
             } else if (isset($user->active)) {
@@ -113,7 +168,6 @@ class UserController extends Controller
                             ($user->status === 'active'))
             ]);
         } catch (\Exception $e) {
-            // Add detailed error logging
             \Log::error('Error toggling user status: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
@@ -130,11 +184,11 @@ class UserController extends Controller
         $user = User::findOrFail($id);
 
         $validator = Validator::make($request->all(), [
-            'first_name' => 'sometimes|string|max:255',
-            'last_name' => 'sometimes|string|max:255',
-            'email' => 'sometimes|string|email|max:255|unique:users,email,'.$id,
-            'phone' => 'sometimes|string|max:20',
-            'password' => 'sometimes|string|min:8',
+            'first_name' => 'sometimes|required|string|max:255',
+            'last_name' => 'sometimes|required|string|max:255',
+            'email' => 'sometimes|required|string|email|max:255|unique:users,email,'.$id,
+            'phone' => 'nullable|string|max:20',
+            'password' => 'sometimes|nullable|string|min:8',
             'role' => 'sometimes|string',
         ]);
 
@@ -142,34 +196,64 @@ class UserController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        if ($request->has('first_name')) {
-            $user->first_name = $request->first_name;
+        $data = $validator->validated();
+
+        if (!empty($data['password'])) {
+            $data['password'] = Hash::make($data['password']);
+        } else {
+            unset($data['password']);
         }
 
-        if ($request->has('last_name')) {
-            $user->last_name = $request->last_name;
+        try {
+            $user->fill($data);
+            $user->save();
+
+            return response()->json([
+                'success' => true,
+                'user' => $user,
+                'message' => 'User updated successfully.'
+            ]);
+        } catch (QueryException $e) {
+            if ($e->errorInfo[1] == 1062) {
+                return response()->json([
+                    'success' => false,
+                    'errors' => [
+                        'email' => ['A user with this email already exists.']
+                    ],
+                    'message' => 'A user with this email already exists.'
+                ], 422);
+            }
+
+            Log::error("Error updating user: {$e->getMessage()}");
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while updating the user.'
+            ], 500);
+        }
+    }
+
+    public function updatePassword(Request $request, string $id)
+    {
+        $user = User::findOrFail($id);
+
+        $validator = Validator::make($request->all(), [
+            'newPassword' => 'sometimes|required_with:newPassword|string|min:8',
+            'password' => 'sometimes|required_with:password|string|min:8',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        if ($request->has('email')) {
-            $user->email = $request->email;
+        $plain = $request->input('newPassword', $request->input('password'));
+        if (!$plain) {
+            return response()->json(['message' => 'No password provided'], 400);
         }
 
-        if ($request->has('password')) {
-            $user->password = Hash::make($request->password);
-        }
-        if ($request->has('phone')) {
-            $user->phone = $request->phone;
-        }
-        if ($request->has('role')) {
-            $user->role = $request->role;
-        }
-        if ($request->has('avatar')) {
-            $user->avatar = $request->avatar;
-        }
-
+        $user->password = Hash::make($plain);
         $user->save();
 
-        return response()->json($user);
+        return response()->json(['message' => 'Password updated successfully'], 200);
     }
 
     /**
@@ -177,22 +261,19 @@ class UserController extends Controller
      */
     public function destroy(string $id, Request $request)
     {
-        // Get the current authenticated user
         $currentUser = $request->user();
 
-        // Check if the user is trying to delete themselves
         if ($currentUser->id == $id) {
             return response()->json([
                 'success' => false,
                 'message' => 'You cannot delete your own account.'
-            ], 403); // Return forbidden status code
+            ], 403); 
         }
 
         $user = User::findOrFail($id);
 
 
 
-        // If all checks pass, proceed with deletion
         $user->delete();
 
         return response()->json([
@@ -216,24 +297,19 @@ class UserController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        // Create avatars directory if it doesn't exist
         $avatarPath = public_path('assets/avatars');
         if (!file_exists($avatarPath)) {
             mkdir($avatarPath, 0755, true);
         }
 
-        // Delete old avatar if exists
         if ($user->avatar && file_exists(public_path(ltrim($user->avatar, '/')))) {
             unlink(public_path(ltrim($user->avatar, '/')));
         }
 
-        // Generate avatar name
         $avatarName = $id . '_' . time() . '.' . $request->avatar->extension();
 
-        // Move the uploaded file to assets directory
         $request->file('avatar')->move($avatarPath, $avatarName);
 
-        // Update user record with avatar path
         $user->avatar = '/assets/avatars/' . $avatarName;
         $user->save();
 

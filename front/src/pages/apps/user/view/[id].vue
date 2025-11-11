@@ -29,8 +29,10 @@ const userData = reactive({
   phone: '',
   role: '',
   is_active: '',
-  avatar: ''
+  avatar: '',
+  password: ''
 })
+
 
 const passwordData = reactive({
   newPassword: '',
@@ -171,12 +173,23 @@ const saveUserInfo = async () => {
   
   if (!valid) return
   
+  if (userData.phone) {
+      const phoneRegex = /^[0-9]+$/;
+
+      if (!phoneRegex.test(userData.phone)) {
+        alertMessage.value = 'Phone must contain only numbers';
+        alertType.value = 'error'
+        return;
+      }
+    }
   isSubmitting.value = true
   
   try {
     console.log('Sending data to API:', userData)
     const response = await userService.updateUser(Number(userId), userData)
     console.log('API response:', response)
+
+
     
     if (passwordData.newPassword) {
       if (passwordData.newPassword !== passwordData.confirmPassword) {
@@ -196,7 +209,7 @@ const saveUserInfo = async () => {
     
     setTimeout(() => {
       window.location.href = `/apps/user/list/`
-    }, 1500)
+    }, 1000)
     
     passwordData.newPassword = ''
     passwordData.confirmPassword = ''
@@ -210,14 +223,26 @@ const saveUserInfo = async () => {
 
 const toggleSuspend = async () => {
   isSubmitting.value = true
+
   try {
     const response = await userService.toggleUserStatus(Number(userId))
-    userData.is_active = response.is_active
+    const payload = response?.data ?? response
+
+    if (payload?.success === false) {
+      alertMessage.value = payload.message || 'Cannot change user status'
+      alertType.value = 'error'
+      userData.is_active = payload.is_active ?? userData.is_active
+      return
+    }
+
+    userData.is_active = payload?.is_active ?? payload?.user?.is_active ?? (userData.is_active ? 0 : 1)
+
     alertMessage.value = `User has been ${userData.is_active ? 'activated' : 'suspended'} successfully`
     alertType.value = 'success'
   } catch (error) {
     console.error('Error toggling user status:', error)
-    alertMessage.value = 'Failed to toggle user status'
+    const payload = error?.response?.data ?? error?.data ?? null
+    alertMessage.value = payload?.message ?? 'Failed to toggle user status'
     alertType.value = 'error'
   } finally {
     isSubmitting.value = false
@@ -330,7 +355,7 @@ const toggleSuspend = async () => {
         </VCardText>
 
         <!-- Action Buttons -->
-        <VCardText class="d-flex justify-center gap-x-4">
+        <VCardText class="d-flex justify-center gap-x-4 align-center ">
           <template v-if="userId != currentUserId">
             <VBtn 
               v-if="userData.is_active > 0" 
@@ -350,8 +375,6 @@ const toggleSuspend = async () => {
             >
               Activate
             </VBtn>
-          </template>
-          
           <VBtn
             variant="tonal"
             size="small"
@@ -360,6 +383,8 @@ const toggleSuspend = async () => {
           >
             <VIcon icon="tabler-trash" size="16" />
           </VBtn>
+          </template>
+          
         </VCardText>
       </VCard>
     </VCol>

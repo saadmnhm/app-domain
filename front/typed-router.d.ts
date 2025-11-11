@@ -26,6 +26,7 @@ declare module 'vue-router/auto-routes' {
     'apps-client-list': RouteRecordInfo<'apps-client-list', '/apps/client/list', Record<never, never>, Record<never, never>>,
     'apps-client-view-id': RouteRecordInfo<'apps-client-view-id', '/apps/client/view/:id', { id: ParamValue<true> }, { id: ParamValue<false> }>,
     'apps-domain-list': RouteRecordInfo<'apps-domain-list', '/apps/domain/list', Record<never, never>, Record<never, never>>,
+    'apps-user-components-add-new-user-drawer': RouteRecordInfo<'apps-user-components-add-new-user-drawer', '/apps/user/components/AddNewUserDrawer', Record<never, never>, Record<never, never>>,
     'apps-user-list': RouteRecordInfo<'apps-user-list', '/apps/user/list', Record<never, never>, Record<never, never>>,
     'apps-user-view-id': RouteRecordInfo<'apps-user-view-id', '/apps/user/view/:id', { id: ParamValue<true> }, { id: ParamValue<false> }>,
     'login': RouteRecordInfo<'login', '/login', Record<never, never>, Record<never, never>>,

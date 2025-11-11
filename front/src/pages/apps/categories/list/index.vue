@@ -18,7 +18,7 @@ const sortBy = ref({ key: 'created_at', order: 'desc' })
 const categoryForm = ref({
   label: '',
   description: '',
-  is_active: true,
+  is_active: false,
 })
 const formErrors = ref({})
 const isSubmitting = ref(false)
@@ -74,7 +74,7 @@ const resetForm = () => {
   categoryForm.value = {
     label: '',
     description: '',
-    is_active: true,
+    is_active: false,
   }
   formErrors.value = {}
   editMode.value = false
@@ -159,14 +159,26 @@ const submitCategoryForm = async () => {
     isAddEditCategoryDialogVisible.value = false
     fetchCategories()
   } catch (error) {
-    console.error('Error saving category:', error)
-    
-    if (error.response?.data?.errors) {
-      formErrors.value = error.response.errors
-    } else if (error.response?.data?.message) {
-      formErrors.value = { general: error.response.message }
+    console.error('Error saving domain:', error)
+
+    let payload = null
+    const res = error?.response
+    try {
+      if (res && typeof res.json === 'function') {
+        payload = await res.json()
+      } else {
+        payload = res?.data ?? error?.data ?? null
+      }
+    } catch (e) {
+      payload = res?.data ?? error?.data ?? null
+    }
+
+    if (payload?.errors) {
+      formErrors.value = payload.errors
+    } else if (payload?.message) {
+      formErrors.value = { general: payload.message }
     } else {
-      formErrors.value = { general: 'An error occurred while saving the category' }
+      formErrors.value = { general: 'An error occurred while saving the domain' }
     }
   } finally {
     isSubmitting.value = false
@@ -290,7 +302,7 @@ const isCategoryInUse = (category) => {
 </script>
 
 <template>
-  <VCard>
+  <VCard color="transparent" elevation="0">
     <!-- Header -->
     <VCardItem>
       <VCardTitle>Client Categories</VCardTitle>
@@ -309,7 +321,6 @@ const isCategoryInUse = (category) => {
       </template>
     </VCardItem>
 
-    <VDivider />
 
     <!-- Table -->
     <VRow v-if="!isLoading" class="px-3 pt-3 mb-5" style="background-color: transparent;">

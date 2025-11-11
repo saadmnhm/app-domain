@@ -59,18 +59,32 @@ const submitClientForm = async () => {
     }
     
     emit('update:modelValue', false)
-    emit('saved', response.data)
+    emit('saved', response)
     return response
     
   } catch (error) {
     console.error('Error saving client:', error)
+    let payload = null
+    const res = error?.response
     
-    if (error.response?.data?.errors) {
-      formErrors.value = error.response.data.errors
-    } else if (error.response?.data?.message) {
-      formErrors.value.general = error.response.data.message
+    try {
+      if (res && typeof res.json === 'function') {
+        payload = await res.json()
+      } else {
+        payload = res?.data ?? error?.data ?? null
+      }
+    } catch (e) {
+      payload = res?.data ?? error?.data ?? null
+    }
+    
+    if (payload?.errors) {
+      formErrors.value = payload.errors
+    } else if (payload?.message) {
+      formErrors.value = { general: payload.message }
+    } else if (error?.message) {
+      formErrors.value = { general: error.message }
     } else {
-      formErrors.value.general = 'An error occurred while saving. Please try again.'
+      formErrors.value = { general: 'An error occurred while saving. Please try again.' }
     }
     throw error
   } finally {
@@ -82,21 +96,32 @@ const submitForm = async () => {
   return await submitClientForm()
 }
 
+
+
 const fetchCategories = async () => {
   try {
-    const response = await clientService.getCategories()
-    categories.value = response.data || response
+    const res = await clientService.getCategories()
+    const data = res.data || res
+
+    categories.value = (data.data || data || [])
+      .filter(cat => cat && Number(cat.is_active))
   } catch (error) {
     console.error('Error fetching categories:', error)
+    categories.value = []
   }
 }
+
 
 const fetchDomains = async () => {
   try {
     const response = await domainService.getDomains()
-    domains.value = response.data|| response
+    const data = response.data || res
+
+    domains.value = (data.data || data || [])
+      .filter(dom => dom && Number(dom.is_active))
   } catch (error) {
     console.error('Error fetching domains:', error)
+    categories.value = []
   }
 }
 
@@ -240,12 +265,12 @@ defineExpose({
           v-model="clientForm.date_integration"
           label="Integration Date"
           type="date"
+          required
           :error-messages="formErrors.date_integration"
         />
       </VCol>
     </VRow>
 
-    <VDivider class="my-4" />
     
   </VForm>
 </template>

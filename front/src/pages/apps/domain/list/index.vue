@@ -17,6 +17,7 @@ const sortBy = ref({ key: 'created_at', order: 'desc' })
 const domainForm = ref({
   label: '',
   description: '',
+  is_active: false,
 })
 const formErrors = ref({})
 const isSubmitting = ref(false)
@@ -73,6 +74,7 @@ const resetForm = () => {
   domainForm.value = {
     label: '',
     description: '',
+    is_active: false,
   }
   formErrors.value = {}
   editMode.value = false
@@ -92,6 +94,7 @@ const editDomain = (domain) => {
   domainForm.value = {
     label: domain.label,
     description: domain.description || '',
+    is_active: Boolean(domain.is_active),
   }
   selectedDomain.value = domain
   editMode.value = true
@@ -116,6 +119,7 @@ const submitDomainForm = async () => {
     const formData = new FormData()
     formData.append('label', domainForm.value.label)
     formData.append('description', domainForm.value.description || '')
+    formData.append('is_active', domainForm.value.is_active ? 1 : 0)
 
     if (iconFile.value) {
       formData.append('icon', iconFile.value)
@@ -132,10 +136,22 @@ const submitDomainForm = async () => {
   } catch (error) {
     console.error('Error saving domain:', error)
 
-    if (error.response?.data?.errors) {
-      formErrors.value = error.response.data.errors
-    } else if (error.response?.data?.message) {
-      formErrors.value = { general: error.response.data.message }
+    let payload = null
+    const res = error?.response
+    try {
+      if (res && typeof res.json === 'function') {
+        payload = await res.json()
+      } else {
+        payload = res?.data ?? error?.data ?? null
+      }
+    } catch (e) {
+      payload = res?.data ?? error?.data ?? null
+    }
+
+    if (payload?.errors) {
+      formErrors.value = payload.errors
+    } else if (payload?.message) {
+      formErrors.value = { general: payload.message }
     } else {
       formErrors.value = { general: 'An error occurred while saving the domain' }
     }
@@ -220,7 +236,7 @@ const deleteDomain = async () => {
     if (error.response?.status === 409) {
       alert(error.response.data.message)
     } else {
-      console.error('Error deleting category:', error)
+      console.error('Error deleting domain:', error)
     }
   } finally {
     isSubmitting.value = false
@@ -261,25 +277,13 @@ const isDomainInUse = (domain) => {
 </script>
 
 <template>
-  <VCard>
+  <VCard color="transparent" elevation="0">
     <!-- Header -->
     <VCardItem>
       <VCardTitle>Domain D'activité</VCardTitle>
       
       <template #append>
         <div class="d-flex align-center gap-4">
-          <!-- Search -->
-          <VTextField
-            v-model="searchQuery"
-            density="compact"
-            placeholder="Search domains"
-            append-inner-icon="tabler-search"
-            single-line
-            hide-details
-            @keyup.enter="handleSearch"
-            style="max-width: 300px; min-width: 250px;"
-          />
-          
           <!-- Add New Button -->
           <VBtn
             prepend-icon="tabler-plus"
@@ -292,7 +296,6 @@ const isDomainInUse = (domain) => {
       </template>
     </VCardItem>
 
-    <VDivider />
 
     <!-- Table -->
     <VRow v-if="!isLoading" class="px-3 pt-3 mb-5">
@@ -325,6 +328,17 @@ const isDomainInUse = (domain) => {
             <VCardTitle>
               {{ item.label }}
             </VCardTitle>
+
+
+            <template #append>
+              <VChip
+                :color="item.is_active ? 'success' : 'secondary'"
+                size="small"
+                class="text-capitalize"
+              >
+                {{ item.is_active ? 'Active' : 'Inactive' }}
+              </VChip>
+            </template>
             
            
           </VCardItem>
@@ -382,7 +396,7 @@ const isDomainInUse = (domain) => {
               v-else
               location="top"
             >
-              <span>Cannot delete: Category is being used by {{ item.clients_count }}</span>
+              <span>Cannot delete: domain is being used by {{ item.clients_count }}</span>
             </VTooltip>
           </VCardActions>
         </VCard>
@@ -581,7 +595,16 @@ const isDomainInUse = (domain) => {
               />
             </VCol>
             
-           
+            <!-- Status Field -->
+            <VCol cols="12">
+              <VSwitch
+                v-model="domainForm.is_active"
+                label="Active"
+                color="primary"
+                :error-messages="formErrors.is_active"
+                inset
+              />
+            </VCol>
             
           </VRow>
           

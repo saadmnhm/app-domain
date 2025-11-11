@@ -38,11 +38,18 @@ const fetchClient = async () => {
     isLoading.value = false
   }
 }
-
+const sortedContacts = computed(() => {
+  return (contacts.value ?? []).slice().sort((a, b) => {
+    const ai = Number(a?.is_responsable || 0)
+    const bi = Number(b?.is_responsable || 0)
+    if (bi !== ai) return bi - ai
+    return (b?.id || 0) - (a?.id || 0)
+  })
+})
 const fetchContacts = async () => {
   try {
     const response = await clientContactService.getContactsByClient(clientId.value)
-    contacts.value = response.data || response
+    contacts.value = response.data || response || []
   } catch (error) {
     console.error('Error fetching contacts:', error)
   }
@@ -122,7 +129,34 @@ const handleContactSaved = () => {
 const handleContactCanceled = () => {
   closeContactDialog()
 }
+const toggleContactResponsable = async (contact) => {
+  if (!contact || !contact.id) return
 
+  const previous = !!contact.is_responsable
+  const newValue = !previous ? 1 : 0
+
+  const other = contacts.value.find(c => c.id !== contact.id && Boolean(Number(c.is_responsable)))
+  if (newValue === 1 && other) {
+    other.is_responsable = 0
+  }
+  contact.is_responsable = newValue
+
+  try {
+    await clientContactService.updateContact(contact.id, { is_responsable: newValue })
+
+    if (newValue === 1 && other) {
+      try {
+        await clientContactService.updateContact(other.id, { is_responsable: 0 })
+      } catch (err) {
+        console.error('Failed to unset previous responsable on server:', err)
+      }
+    }
+  } catch (error) {
+    console.error('Error updating contact responsable flag:', error)
+    if (other) other.is_responsable = Boolean(Number(other.is_responsable)) ? 1 : 0
+    contact.is_responsable = previous ? 1 : 0
+  }
+}
 const confirmDeleteContact = (contact) => {
   contactToDelete.value = contact
   isDeleteContactDialogVisible.value = true
@@ -479,7 +513,7 @@ const getHistoryItemTitle = (type) => {
           <div v-else>
             <VList>
               <VListItem
-                v-for="contact in contacts"
+                v-for="contact in sortedContacts"
                 :key="contact.id"
                 class="py-3"
               >
@@ -497,7 +531,7 @@ const getHistoryItemTitle = (type) => {
                   {{ contact.firstname || contact.first_name }} 
                   {{ contact.lastname || contact.last_name }}
                   <VChip
-                    v-if="contact.is_responsable || client?.contact_principal === contact.id"
+                    v-if="contact.is_responsable"
                     size="small"
                     color="success"
                     class="ms-2"
@@ -523,6 +557,16 @@ const getHistoryItemTitle = (type) => {
 
                 <template #append>
                   <div class="d-flex gap-2">
+                    <VBtn
+                      icon
+                      variant="text"
+                      :color="contact.is_responsable ? 'success' : 'default'"
+                      size="small"
+                      @click="toggleContactResponsable(contact)"
+                    >
+                      <VIcon icon="tabler-phone" />
+                    </VBtn>
+                    
                     <VBtn
                       icon
                       variant="text"

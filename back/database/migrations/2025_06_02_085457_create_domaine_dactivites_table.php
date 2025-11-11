@@ -13,9 +13,10 @@ return new class extends Migration
     {
         Schema::create('domaine_dactivites', function (Blueprint $table) {
             $table->id();
-            $table->string('label')->unique();
+            $table->string('label')->nullable();
             $table->string('description')->nullable();
             $table->string('icon')->nullable();
+            $table->boolean('is_active')->default(true);
             $table->timestamps();
             $table->softDeletes();
         });

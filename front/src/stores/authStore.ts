@@ -1,10 +1,10 @@
 import { defineStore } from 'pinia'
-import axios from 'axios'
+import { $api } from '@/utils/api'
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
     user: null,
-    token: localStorage.getItem('auth_token'),
+    token: localStorage.getItem('auth_token'), 
   }),
   
   getters: {
@@ -14,14 +14,18 @@ export const useAuthStore = defineStore('auth', {
   actions: {
     async login(email, password) {
       try {
-        const response = await axios.post('http://localhost:8000/api/login', { email, password })
+        const response = await $api('/login', {
+          method: 'POST',
+          body: { email, password }
+        })
         
-        if (response.data.access_token) {
-          this.token = response.data.access_token
-          localStorage.setItem('auth_token', response.data.access_token)
+        if (response.access_token) {
+          this.token = response.access_token
+          localStorage.setItem('auth_token', response.access_token)
           
-          // Set axios default auth header
-          axios.defaults.headers.common['Authorization'] = `Bearer ${this.token}`
+          // Set cookie using document.cookie API
+          const maxAge = 60 * 60 * 24 * 7 // 7 days
+          document.cookie = `accessToken=${response.access_token}; path=/; max-age=${maxAge}; SameSite=Lax`
           
           await this.fetchUser()
           return response
@@ -34,8 +38,8 @@ export const useAuthStore = defineStore('auth', {
     
     async fetchUser() {
       try {
-        const response = await axios.get('http://localhost:8000/api/user')
-        this.user = response.data
+        const response = await $api('/user')
+        this.user = response
         return this.user
       } catch (error) {
         console.error('Failed to fetch user:', error)
@@ -46,31 +50,26 @@ export const useAuthStore = defineStore('auth', {
     
     async logout() {
       try {
-        // Call backend to invalidate token if available
         if (this.token) {
-          await axios.post('/api/logout')
+          await $api('/logout', { 
+            method: 'POST'
+          })
         }
       } catch (error) {
         console.error('Error during logout:', error)
       } finally {
-        // Always clean up local state
         this.user = null
         this.token = null
         
-        // Remove from localStorage
         localStorage.removeItem('auth_token')
         
-        // Remove auth header
-        delete axios.defaults.headers.common['Authorization']
+        document.cookie = 'accessToken=; path=/; max-age=0'
         
-        // First redirect to login page
         window.location.href = '/login'
         
-        // Then force a complete page reload
-        // This ensures all app state is cleared
         setTimeout(() => {
           window.location.reload()
-        }, 100) 
+        }, 1000) 
       }
     }
   }
